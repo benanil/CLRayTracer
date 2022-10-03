@@ -113,6 +113,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -129,6 +130,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -140,8 +142,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="CLRayTracer.cpp" />
-    <ClCompile Include="glad.c" />
+    <ClCompile Include="glad.cpp" />
     <ClCompile Include="Helper.cpp" />
+    <ClCompile Include="Logger.cpp" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
@@ -150,6 +153,7 @@
     <ClInclude Include="cl.hpp" />
     <ClInclude Include="CLHelper.hpp" />
     <ClInclude Include="Common.hpp" />
+    <ClInclude Include="Logger.hpp" />
     <ClInclude Include="Renderer.hpp" />
     <ClInclude Include="Window.hpp" />
   </ItemGroup>

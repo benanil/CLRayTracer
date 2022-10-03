@@ -13,17 +13,12 @@ enum eMemFlags
 
 namespace cl
 {
-	struct CommandQueue
-	{
-			
-	};
-			
 	struct Kernel
 	{
-		cl_kernel kernel ;
+		cl_kernel kernel;
 
 		operator cl_kernel() const { return kernel; }
-		Kernel() {}	
+		Kernel() {}
 		Kernel(cl_program program, const char* funcName)
 		{
 			cl_int clerr;
@@ -40,17 +35,9 @@ namespace cl
 			clReleaseKernel(kernel);
 		}
 	};
+}
 
-	struct Program
-	{
-		cl_program program;
-		
-		operator cl_program() const { return program; }
-
-		Program(cl_context context, const char* path);
-		
-		~Program() {
-			clReleaseProgram(program);
-		}
-	};
+namespace Helper
+{
+	char* ReadAllText(const char* path);
 }

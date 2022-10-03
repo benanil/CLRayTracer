@@ -1,6 +1,7 @@
 #include "CLHelper.hpp"
 #include <fstream>
 #include <filesystem>
+#include "Logger.hpp"
 
 static void SkipBOM(std::ifstream& in)
 {
@@ -14,10 +15,11 @@ static void SkipBOM(std::ifstream& in)
 	in.seekg(0);
 }
 
-cl::Program::Program(cl_context context, const char* path)
+char* Helper::ReadAllText(const char* path)
 {
 	if (!std::filesystem::exists(path)) {
-		printf("file is not exist! %c ", path);
+		AXERROR("file is not exist!\n %c", path);
+		return nullptr;
 	}
 
 	std::ifstream f(path, std::ios::in | std::ios::binary | std::ios::failbit);
@@ -31,14 +33,6 @@ cl::Program::Program(cl_context context, const char* path)
 
 	printf(code); printf("\n");
 
-	program = clCreateProgramWithSource(context, 1, (const char**)&code, NULL, &clerr);
-
-	// compile the program
-	if (clBuildProgram(program, 0, NULL, NULL, NULL, NULL) != CL_SUCCESS)
-	{
-		printf("Error building program\n");
-		assert(0);
-	}
 	f.close();
-	delete[] code;
+	return code;
 }
