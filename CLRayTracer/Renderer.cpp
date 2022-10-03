@@ -11,9 +11,13 @@
 #include <thread>
 #include "Logger.hpp"
 
-// todo: parse kernel from file
-//	     abstract buffer
+// todo: 
+//		 calculate noise at runtime with time value
+//		 vector3 vector2... math
+//		 basic ray tracer
 //       create ray generator
+//		 input callbacks
+//       window resize callback
 
 namespace Renderer
 {
@@ -37,17 +41,16 @@ void main()\
 	color = texture(texture0, texCoord);\
 }";
 	
-	enum KernelIndex
-	{
+	enum KernelIndex {
 		eKernelGenRays, eKernelTrace
 	};
 
 	cl_context context;
-	cl::Kernel kernel;
+	cl_kernel textureKernel;
 	cl_command_queue command_queue;
 	cl_program program;
-	cl_int clerr;
-	cl_mem input;
+	
+	cl_mem clglTexture;
 
 	GLuint VAO;
 	GLuint shaderProgram;
@@ -63,6 +66,7 @@ int Renderer::Initialize()
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		printf("Failed to initialize GLAD"); return 0;
 	}
+	cl_int clerr;
 	
 	std::this_thread::yield();
 	std::this_thread::yield();
@@ -71,9 +75,6 @@ int Renderer::Initialize()
 
 	// initialize openCL
 	{
-		constexpr int DATA_SIZE = 10;
-		int inputData[DATA_SIZE] = { 2, 4, 6, 8, 16, 32, 64, 128, 256, 512 };
-
 		cl_uint num_of_platforms = 0;
 		cl_platform_id platform_id;
 		// retreives a list of platforms available
@@ -101,9 +102,9 @@ int Renderer::Initialize()
 
 		// create a context with the GPU device
 		context = clCreateContext(properties, 1, &device_id, NULL, NULL, &clerr);
-
+		cl_command_queue_properties cmdProperties = CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE;
 		// create command queue using the context and device
-		command_queue = clCreateCommandQueueWithProperties(context, device_id, 0, &clerr);
+		command_queue = clCreateCommandQueueWithProperties(context, device_id, nullptr, &clerr);
 
 		char* kernelCode = Helper::ReadAllText("../kernels/kernel_main.cl");
 		if (!kernelCode) { return 0; }
@@ -126,37 +127,23 @@ int Renderer::Initialize()
 			return 0;
 		}
 		
-		// specify which kernel from the program to execute
-		kernel = cl::Kernel(program, "hello");
+	    /*// specify which kernel from the program to execute
+	    kernel = cl::Kernel(program, "hello");
 		input = clCreateBuffer(context, eMemReadWrite | eMemCopyHostPtr, 4ull * DATA_SIZE, inputData, &clerr); assert(clerr == 0);
-
 		// load data into the input buffer
-		clEnqueueWriteBuffer(command_queue, input, CL_TRUE, 0,
-			sizeof(int) * DATA_SIZE, inputData, 0, NULL, NULL);
-		
+		clEnqueueWriteBuffer(command_queue, input, CL_TRUE, 0, sizeof(int) * DATA_SIZE, inputData, 0, NULL, NULL);
 		int startVal = 50;
-
 		// set the argument list for the kernel command
 		clerr |= kernel.SetArg(0, &input);
 		clerr |= kernel.SetArg(1, &startVal);
 		size_t global = DATA_SIZE;
-
 		// enqueue the kernel command for execution
-		clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global,
-			NULL, 0, NULL, NULL);
-	
+		clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
 		clFinish(command_queue);
-
 		// // copy the results from out of the output buffer
-		clEnqueueReadBuffer(command_queue, input, CL_TRUE, 0,
-			sizeof(int) * DATA_SIZE, inputData, 0, NULL, NULL);
-
+		clEnqueueReadBuffer(command_queue, input, CL_TRUE, 0, sizeof(int) * DATA_SIZE, inputData, 0, NULL, NULL);
 		// print the results
-		printf("output: ");
-		for (int i = 0; i < DATA_SIZE; i++)
-		{
-			printf("%d ", inputData[i]);
-		}
+		for (int i = 0; i < DATA_SIZE; i++) printf("%d ", inputData[i]);*/
 	}
 
 	// Build and compile our shader program
@@ -214,20 +201,11 @@ int Renderer::Initialize()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Window::GetWidth(), Window::GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-	
-	cl::Kernel textureKernel = cl::Kernel(program, "texture");
+	glActiveTexture(GL_TEXTURE0);
 
-	cl_mem clglTexture = clCreateFromGLTexture(context, GL_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
+	textureKernel = clCreateKernel(program, "texture", &clerr); assert(clerr == 0);
 
-	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
-
-	clerr = textureKernel.SetArg(0, &clglTexture);								assert(clerr == 0);
-
-	size_t globalWorkSize[2] = { Window::GetWidth(), Window::GetHeight() };
-	size_t globalOffset[2] = { 1, 1 };
-
-	clerr = clEnqueueNDRangeKernel(command_queue, textureKernel, 2, globalOffset, globalWorkSize, 0, 0, 0, 0); assert(clerr == 0);
-	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
+	clglTexture = clCreateFromGLTexture(context, GL_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
 
 	{ // create empty vao unfortunately this step is necessary for ogl 3.2
 		glGenVertexArrays(1, &VAO);
@@ -238,10 +216,22 @@ int Renderer::Initialize()
 
 void Renderer::Render()
 {
+	static float time = 0;
+	cl_int clerr;
+	time += 0.001f;
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, screenTexture);
+	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
+	clerr = clSetKernelArg(textureKernel, 0, sizeof(cl_mem), &clglTexture);     assert(clerr == 0);
+	clerr = clSetKernelArg(textureKernel, 1, sizeof(float) , &time       );   	assert(clerr == 0);
+
+	size_t globalWorkSize[2] = { Window::GetWidth(), Window::GetHeight() };
+	size_t globalOffset[2] = { 0, 0 };
+
+	clerr = clEnqueueNDRangeKernel(command_queue, textureKernel, 2, globalOffset, globalWorkSize, 0, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
+
+	clFinish(command_queue);
 
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 }
@@ -252,9 +242,9 @@ void Renderer::Terminate()
 	glDeleteProgram(shaderProgram);
 
 	// cleanup - release OpenCL resources
-	clReleaseMemObject(input);
+	clReleaseMemObject(clglTexture);
 	clReleaseProgram(program);
-	clReleaseKernel(kernel);
 	clReleaseCommandQueue(command_queue);
+	clReleaseKernel(textureKernel);
 	clReleaseContext(context);
 }

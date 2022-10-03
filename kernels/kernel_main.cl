@@ -1,8 +1,3 @@
-__kernel void hello(__global int* inout, int startValue) 
-{
-    int i = get_global_id(0);
-    inout[i] += startValue;
-}
 
 float2 philox(uint2 st, uint k)
 {
@@ -22,7 +17,7 @@ float2 philox(uint2 st, uint k)
   return convert_float2(st) / 2147483648.0f - 1.0f;
 }
 
-float SampleSimplexNoise(float2 uv)
+float SampleSimplexNoise(float2 uv, float2 offset)
 {
 	float  c, d, m;
   	float2 p;
@@ -34,7 +29,7 @@ float SampleSimplexNoise(float2 uv)
       	float2 g[3], u[3], i, di;
       	int k;
 
-      	p = uv * d;
+      	p = offset + uv * d;
 
 	  	s = (p.x + p.y) * (sqrt(3.0f) - 1) / 2;
         i = floor(p + s);
@@ -66,15 +61,16 @@ float SampleSimplexNoise(float2 uv)
     }
 	return m;
 }
-__kernel void texture(__write_only image2d_t inout) 
+
+__kernel void texture(__write_only image2d_t inout, float time) 
 {
 	const int gidx = get_global_id(0);
   	const int gidy = get_global_id(1);
 
 	float2 uv = (float2)(gidx, gidy) / (float2)(800.0f, 600.0f);
    	
-	float m = SampleSimplexNoise(uv);
-	float m1 = SampleSimplexNoise(uv * 500.0f) - m;
+	float m  = SampleSimplexNoise(uv *0.8f, (float2)(time, 0));
+	float m1 = SampleSimplexNoise(uv * 500.0f, (float2)(time, 0)) - m;
 
     uv *=  1.0f - uv.yx;   //vec2(1.0)- uv.yx; -> 1.-u.yx; Thanks FabriceNeyret !
     
@@ -82,5 +78,5 @@ __kernel void texture(__write_only image2d_t inout)
     
     vig = 1.0f - pow(vig, 0.35f); // change pow for modifying the extend of the  vignette
 	
-	write_imagef(inout, (int2)(gidx, gidy), (float4)(m - vig , m1,1.0f- sin(vig * 3.4f), 1.0f));
+	write_imagef(inout, (int2)(gidx, gidy), (float4)(m - vig , m1, 0, 1.0f));
 }

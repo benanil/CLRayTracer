@@ -10,7 +10,8 @@
 // The MAIN function, from here we start the application and run the game loop
 int main()
 {
-    if(!Window::Create() || !Renderer::Initialize()) return 0;
+    if (!Window::Create()) return 0;
+    if (!Renderer::Initialize()) return 0;
 
     while (!Window::ShouldClose())
     {
