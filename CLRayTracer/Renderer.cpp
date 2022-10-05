@@ -12,10 +12,6 @@
 #include "Math/Camera.hpp"
 
 // todo: 
-//		 calculate noise at runtime with time value
-//		 vector3 vector2... math
-//		 basic ray tracer
-//       create ray generator
 //		 input callbacks
 //       window resize callback
 
@@ -170,7 +166,7 @@ int Renderer::Initialize()
 	rayMem = clCreateBuffer(context, eMemReadWrite, sizeof(Vector3f) * rayCount, nullptr, &clerr); assert(clerr == 0);
 
 	textureKernel = clCreateKernel(program, "texture", &clerr); assert(clerr == 0);
-	rayGenKernel     = clCreateKernel(program, "RayGen" , &clerr);  assert(clerr == 0);
+	rayGenKernel  = clCreateKernel(program, "RayGen" , &clerr);  assert(clerr == 0);
 
 	clglTexture = clCreateFromGLTexture(context, GL_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
 	
@@ -188,20 +184,20 @@ void Renderer::Render()
 	int rayCount = windowSize.x * windowSize.y;
 	cl_int clerr;
 	cl_event event;
-
+	// prepare ray generation kernel
 	clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &windowSize.x);                 assert(clerr == 0);
 	clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &windowSize.y);                 assert(clerr == 0);
 	clerr = clSetKernelArg(rayGenKernel, 2, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
 	clerr = clSetKernelArg(rayGenKernel, 3, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
 	clerr = clSetKernelArg(rayGenKernel, 4, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
-
+	// execute ray generation
 	clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
-
+	// prepare Rendering
 	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
 	clerr = clSetKernelArg(textureKernel, 0, sizeof(cl_mem), &clglTexture);     assert(clerr == 0);
 	clerr = clSetKernelArg(textureKernel, 1, sizeof(cl_mem), &rayMem);   	 	assert(clerr == 0);
 	clerr = clSetKernelArg(textureKernel, 2, sizeof(float), &time);   	
-
+	// execute rendering
 	clerr = clEnqueueNDRangeKernel(command_queue, textureKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0); assert(clerr == 0);
 	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
 

@@ -39,7 +39,7 @@ float NextFloat(RandState* state, float min, float max)
 
 // ---- STRUCTURES ----
 
-typedef struct __attribute__((packed))
+typedef struct
 {
 	float3 origin;
 	float3 dir;
@@ -50,48 +50,27 @@ typedef struct
 	float4 r[4];
 } Matrix4;
 
-Matrix4 Identity()
-{
-	Matrix4 result;
-	result.r[0] = (float4)(1.0f, 0.0f, 0.0f, 0.0f);
-	result.r[1] = (float4)(0.0f, 1.0f, 0.0f, 0.0f);
-	result.r[2] = (float4)(0.0f, 0.0f, 1.0f, 0.0f);
-	result.r[3] = (float4)(0.0f, 0.0f, 0.0f, 1.0f);
-	return result;
-}
+// ---- MATH ----
 
 float4 MatMul(Matrix4 m, float4 v)
 {
-	float4 v0 = shuffle(v, (uint4)(0, 0, 0, 0));
-	float4 v1 = shuffle(v, (uint4)(1, 1, 1, 1));
-	float4 v2 = shuffle(v, (uint4)(2, 2, 2, 2));
-	float4 v3 = shuffle(v, (uint4)(3, 3, 3, 3));
-	
-	v0 = m.r[0] * v0;
-	v1 = m.r[1] * v1;
-	v2 = m.r[2] * v2;
-	v3 = m.r[3] * v3;
+	float4 v0 = m.r[0] * shuffle(v, (uint4)(0, 0, 0, 0));
+	float4 v1 = m.r[1] * shuffle(v, (uint4)(1, 1, 1, 1));
+	float4 v2 = m.r[2] * shuffle(v, (uint4)(2, 2, 2, 2));
+	float4 v3 = m.r[3] * shuffle(v, (uint4)(3, 3, 3, 3));
 	
 	float4 a0 = v0 + v1;
 	float4 a1 = v2 + v3;
 	float4 a2 = a0 + a1;
-
 	return a2;
-}
-
-// ---- MATH ----
-
-float LengthSquared(float3 vec)
-{
-	return vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
 }
 
 bool hit_sphere(float3 center, float radius, Ray ray, float4* color) 
 {
     float3 oc = ray.origin - center;
-    float a = LengthSquared(ray.dir);
+    float a = dot(ray.dir, ray.dir);
     float half_b = dot(oc, ray.dir);
-    float c = LengthSquared(oc) - (radius * radius);
+    float c = dot(oc, oc) - (radius * radius);
     float discriminant = half_b * half_b -  a * c;
     
 	if (discriminant < 0) return false;
@@ -132,8 +111,7 @@ kernel void RayGen
 	global float* rays, const Matrix4 inverseView, const Matrix4 inverseProjection
 )
 {
-	const int i = get_global_id(0);
-  	const int j = get_global_id(1);
+	const int i = get_global_id(0), j = get_global_id(1);
 
 	float2 coord = (float2)((float)i / (float)width, (float)j / (float)height);
 	coord = coord * 2.0f - 1.0f;
@@ -146,16 +124,12 @@ kernel void RayGen
 
 kernel void texture(write_only image2d_t inout, global const float* rays, float time) 
 {
-	const int i = get_global_id(0);
-  	const int j = get_global_id(1);
-	
-	int width  = get_image_width(inout); // __local int height = getImageHeight(inout);
+	const int i = get_global_id(0), j = get_global_id(1);
+	const float gamma = 1.2f;
 
-	const float gamma = 1.8f;
-	
 	Ray ray;
-	ray.origin = (float3)(0.0f, 0.0f, 3.0f);
-	ray.dir = vload3(i + j * width, rays);
+	ray.origin = (float3)(0.0f, 0.0f, 1.0f);
+	ray.dir = vload3(i + j * get_image_width(inout), rays);
 
 	float4 pixel_color = pow(ray_color(ray), 1.0f / gamma);
 
