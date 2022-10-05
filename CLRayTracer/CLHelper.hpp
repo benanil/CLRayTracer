@@ -5,6 +5,7 @@
 
 enum eMemFlags
 {
+	eMemNone = 0,
 	eMemRead = CL_MEM_READ_ONLY,
 	eMemWrite = CL_MEM_WRITE_ONLY,
 	eMemReadWrite = CL_MEM_READ_WRITE,

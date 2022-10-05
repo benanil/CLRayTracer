@@ -2,8 +2,6 @@
 #define WIN32_LEAN_AND_MEAN
 #define __SSE__
 #define __SSE2__
-#include <stdio.h>
-#include <cassert>
 #include "Renderer.hpp"
 #include "Window.hpp"
 

@@ -1,12 +1,6 @@
 #pragma once
-
 #include <cstdint>
 
-#ifndef AX_NAMESPACE
-#define AX_NAMESPACE namespace ax {
-#define AX_END_NAMESPACE }
-#endif
-    
 #if AX_SHARED
 #ifdef AX_EXPORT
 		#define AX_API __declspec(dllexport)
@@ -37,6 +31,23 @@
 #   endif
 #endif
 
+#ifndef AXPACK
+#	ifdef __GNUC__
+#		define AXPACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#	elif _MSC_VER
+#		define AXPACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
+#	endif
+#endif
+
+#if defined( __GNUC__ ) || defined(__INTEGRITY)
+#	define AX_ALIGNED(_x)          __attribute__ ((aligned(_x)))
+#	elif defined( _WIN32) && (_MSC_VER)                                                                                   
+#	define AX_ALIGNED(_x)          __declspec(align(_x))      
+#	else
+	#warning  Need to implement some method to align data here
+#	define  CL_ALIGNED(_x)
+#endif
+
 #define ENUM_FLAGS(ENUMNAME, ENUMTYPE) \
 inline ENUMNAME& operator |= (ENUMNAME& a, ENUMNAME b)          noexcept { return (ENUMNAME&)(((ENUMTYPE&)a) |= ((ENUMTYPE)b)); } \
 inline ENUMNAME& operator &= (ENUMNAME& a, ENUMNAME b)			noexcept { return (ENUMNAME&)(((ENUMTYPE&)a) &= ((ENUMTYPE)b)); } \
@@ -48,18 +59,12 @@ inline constexpr ENUMNAME operator ^ (ENUMNAME a, ENUMNAME b)	noexcept { return 
 
 #define ax_assert(...)
 
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
+typedef unsigned short ushort;
+typedef unsigned       uint  ;
+typedef unsigned long  ulong ;
 
 // maybe we should move this to Algorithms.hpp
-template<typename T, typename size_type = uint64> 
+template<typename T, typename size_type = ulong>
 inline size_type Distance(const T* begin, const T* end)
 {
 	size_type result;
