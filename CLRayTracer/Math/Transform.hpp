@@ -22,11 +22,11 @@ public:
 	}
 	
 	void SetRotationEuler(Vector3f euler) {
-		rotation = Quaternion::FromEuler(euler); needsUpdate = true;
+		this->rotation = Quaternion::FromEuler(euler); needsUpdate = true;
 	}
 	
 	void SetRotationEulerDegree(Vector3f euler) {
-		rotation = Quaternion::FromEuler(euler * DegToRad); needsUpdate = true;
+		this->rotation = Quaternion::FromEuler(euler * DegToRad); needsUpdate = true;
 	}
 
 	void SetRotationQuaternion(const Quaternion& rotation) {
@@ -35,9 +35,9 @@ public:
 
 	void SetMatrix(const Matrix4& matrix)
 	{
-		rotation = Matrix4::ExtractRotation(matrix);
-		position = Matrix4::ExtractPosition(matrix);
-		scale    = Matrix4::ExtractScale(matrix);
+		this->rotation = Matrix4::ExtractRotation(matrix);
+		this->position = Matrix4::ExtractPosition(matrix);
+		this->scale    = Matrix4::ExtractScale(matrix);
 	}
 
 	Matrix4& GetMatrix()
@@ -53,15 +53,15 @@ public:
 
 	Vector3f GetForward() const {
 		Vector3f res;
-		_mm_storeu_ps(&res.x,
-			Quaternion::MulVec3(Vector432F( 0, 0, 1, 0), Quaternion::Conjugate(rotation))
+		SSEStoreVector3(&res.x,
+			Quaternion::MulVec3(Vector432F( 0, 0, -1, 0), Quaternion::Conjugate(rotation))
 		);
 		return res; 
 	}
 
 	Vector3f GetRight() const {
 		Vector3f res;
-		_mm_storeu_ps(&res.x, 
+		SSEStoreVector3(&res.x, 
 			Quaternion::MulVec3(Vector432F( 1, 0, 0, 0), Quaternion::Conjugate(rotation))
 		);
 		return res; 
@@ -69,7 +69,7 @@ public:
 
 	Vector3f GetLeft() const {
 		Vector3f res;
-		_mm_storeu_ps(&res.x,
+		SSEStoreVector3(&res.x,
 			Quaternion::MulVec3(Vector432F(-1, 0, 0, 0), Quaternion::Conjugate(rotation))
 		); 
 		return res; 
@@ -77,7 +77,7 @@ public:
 
 	Vector3f GetUp() const {
 		Vector3f res;
-		_mm_storeu_ps(&res.x,
+		SSEStoreVector3(&res.x,
 			Quaternion::MulVec3(Vector432F( 0, 1, 0, 0), Quaternion::Conjugate(rotation))
 		);
 		return res; 

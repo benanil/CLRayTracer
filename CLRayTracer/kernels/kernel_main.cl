@@ -13,56 +13,52 @@ RandState GenRandomState()
 	return state;
 }
 
-unsigned Next(RandState* rng)
-{
-    unsigned long oldstate = rng->state;
-    // Advance internal state
+unsigned Next(RandState* rng) {
+    ulong oldstate = rng->state;
     rng->state = oldstate * 6364136223846793005ULL + (rng->inc | 1);
-    // Calculate output function (XSH RR), uses old state for max ILP
-    unsigned long xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
-    unsigned long rot = oldstate >> 59u;
+    ulong xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
+    ulong rot = oldstate >> 59u;
     rot  = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
 	return (unsigned)(rot >> 16);
 }
 
-float NextFloat01(RandState* state) 
-{
-	const float c_FMul = (1.0 / 16777216.0f);
-	unsigned result = Next(state) >> 8;
-	return *(float*)(&result) * c_FMul;
+float NextFloat01(RandState* state) {
+	constant float c_FMul = (1.0 / 16777216.0f);
+	return as_float(Next(state) >> 8) * c_FMul;
 }
 
-float NextFloat(RandState* state, float min, float max)
-{
+float NextFloat(RandState* state, float min, float max) {
 	return min + (NextFloat01(state) * fabs(min - max));
 }
 
 // ---- STRUCTURES ----
 
-typedef struct
-{
+typedef struct {
 	float3 origin;
 	float3 dir;
 } Ray;
 
-typedef struct 
-{
-	float4 r[4];
+typedef struct {
+	float4 x, y, z, w;
 } Matrix4;
+
+typedef struct {
+	float cameraPos[3];
+	float time;
+} TraceArgs;
+
+typedef struct _RayHit {
+	float3 position;
+	float depth;
+	float3 normal;
+	bool hit;
+};
 
 // ---- MATH ----
 
 float4 MatMul(Matrix4 m, float4 v)
 {
-	float4 v0 = m.r[0] * shuffle(v, (uint4)(0, 0, 0, 0));
-	float4 v1 = m.r[1] * shuffle(v, (uint4)(1, 1, 1, 1));
-	float4 v2 = m.r[2] * shuffle(v, (uint4)(2, 2, 2, 2));
-	float4 v3 = m.r[3] * shuffle(v, (uint4)(3, 3, 3, 3));
-	
-	float4 a0 = v0 + v1;
-	float4 a1 = v2 + v3;
-	float4 a2 = a0 + a1;
-	return a2;
+	return m.x * v.xxxx + m.y * v.yyyy + m.z * v.zzzz + m.w * v.wwww;
 }
 
 bool hit_sphere(float3 center, float radius, Ray ray, float4* color) 
@@ -76,7 +72,6 @@ bool hit_sphere(float3 center, float radius, Ray ray, float4* color)
 	if (discriminant < 0) return false;
 
 	float sqr = sqrt(discriminant);
-
 	float root = (-half_b - sqr) / a;
 	// Find the nearest root that lies in the acceptable range.
 	if (root < 0.01f || 500.0f < root)
@@ -88,19 +83,20 @@ bool hit_sphere(float3 center, float radius, Ray ray, float4* color)
 
 	float3 normal = (hit_point - center) / radius;
 	float3 sun_dir =  (float3)(sin(1.2f), cos(1.0f), 0.0f);
-	float ndl = max(dot(normal, sun_dir), 0.15f);
+	float ndl = max(dot(normal, sun_dir), 0.20f);
 	*color = (float4)(0.8f, 0.62f, 0.45f, 1.0f) * ndl;
 	return (discriminant > 0.0f);
 }
 
-float4 ray_color(Ray ray) 
+float4 ray_color(Ray ray, bool* hit) 
 {
 	float4 out_color;
-	if (hit_sphere((float3)(0.0f,0.0f,-1.0f), 0.5f, ray, &out_color))
-        return out_color;
-    
+	if (hit_sphere((float3)(0.0f,0.0f, 0.0f), 1.0f, ray, &out_color)) {
+    	*hit = true;
+		return out_color;
+	}
 	float3 unit_direction = normalize(ray.dir);
-    float t = 0.5f * (unit_direction[1] + 1.0f);
+    float t = 0.5f * (unit_direction.y + 1.0f);
     return (1.0f - t) * (float4)(1.0f, 1.0f, 1.0f, 1.0f) + t * (float4)(0.5f, 0.7f, 1.0f, 1.0f);
 }
 
@@ -122,16 +118,31 @@ kernel void RayGen
 	vstore3(target.xyz, i + j * width, rays);
 }
 
-kernel void texture(write_only image2d_t inout, global const float* rays, float time) 
+kernel void Trace
+(
+	write_only image2d_t inout,
+	read_only image2d_t skybox, 
+	global const float* rays, TraceArgs trace_args
+) 
 {
 	const int i = get_global_id(0), j = get_global_id(1);
-	const float gamma = 1.2f;
+	constant float gamma = 1.2f;
+	constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
 
 	Ray ray;
-	ray.origin = (float3)(0.0f, 0.0f, 1.0f);
+	ray.origin = vload3(0, trace_args.cameraPos);
 	ray.dir = vload3(i + j * get_image_width(inout), rays);
 
-	float4 pixel_color = pow(ray_color(ray), 1.0f / gamma);
+	bool hit = false;
+	float4 pixel_color = pow(ray_color(ray, &hit), 1.0f / gamma);
+
+	if (!hit)
+	{
+	    float theta = acos(ray.dir.y) / M_PI_F;
+        float phi = fabs(atan2(ray.dir.x, -ray.dir.z)) / M_PI_F ;
+		pixel_color = read_imagef(skybox, sampler, (float2)(phi, theta));//(float4)(theta, phi, 0.0f, 1.0f);
+		if (phi < 0.0f) pixel_color = (float4)(1.0f, 0.0f, 0.0f, 1.0f); 
+	}
 
 	write_imagef(inout, (int2)(i, j), pixel_color);
 }

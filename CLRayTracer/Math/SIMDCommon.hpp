@@ -75,9 +75,7 @@ AXGLOBALCONST Vector432F g_XMOneHalf = { 0.5f, 0.5f, 0.5f, 0.5f };
 
 FINLINE __m128 VECTORCALL SSESelect(const __m128 V1, const __m128 V2, const __m128& Control)
 {
-	__m128 vTemp1 = _mm_andnot_ps(Control, V1);
-	__m128 vTemp2 = _mm_and_ps(V2, Control);
-	return _mm_or_ps(vTemp1, vTemp2);
+	return _mm_or_ps(_mm_andnot_ps(Control, V1), _mm_and_ps(V2, Control));
 }
 
 FINLINE __m256i VECTORCALL SSESelect(const __m256i V1, const __m256i V2, const __m256i& Control)
@@ -91,6 +89,14 @@ FINLINE __m128 VECTORCALL SSESplatX(const __m128 V1) { return _mm_permute_ps(V1,
 FINLINE __m128 VECTORCALL SSESplatY(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(1, 1, 1, 1)); }
 FINLINE __m128 VECTORCALL SSESplatZ(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(2, 2, 2, 2)); }
 FINLINE __m128 VECTORCALL SSESplatW(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(3, 3, 3, 3)); }
+
+
+FINLINE void VECTORCALL SSEStoreVector3(float* f, __m128 vec)
+{
+	_mm_store_ss(f + 0, vec);
+	_mm_store_ss(f + 1, _mm_permute_ps(vec, _MM_SHUFFLE(1,1,1,1)));
+	_mm_store_ss(f + 2, _mm_permute_ps(vec, _MM_SHUFFLE(2,2,2,2)));
+}
 
 FINLINE float VECTORCALL XMVectorGetX(__m128 V) {
 	return _mm_cvtss_f32(V);

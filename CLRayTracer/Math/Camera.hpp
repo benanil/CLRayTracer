@@ -1,12 +1,13 @@
 #pragma once
 #include "Transform.hpp"
 #include "Vector4.hpp"
+#include "Window.hpp"
+#include "../Logger.hpp"
 
 struct Ray
 {
 	Vector3f origin;
 	Vector3f direction;
-	Ray(){}
 	Ray(Vector3f o, Vector3f d) : origin(o), direction(d) {}
 };
 
@@ -18,22 +19,35 @@ struct Camera
 	Matrix4 inverseProjection;
 	Matrix4 inverseView;
 
-	Transform transform;
-
-	float verticalFOV = 45.0f;
-	float nearClip = 0.1f;
-	float farClip = 100.0f;
+	float verticalFOV = 65.0f;
+	float nearClip = 0.01f;
+	float farClip = 500.0f;
+	
 	Vector2i viewportSize;
-
-	Vector3f* m_RayDirections = nullptr;
+	
+	Vector3f position, targetPosition;
+	float angle;
 
 	Camera() {}
 
-	Camera(Vector2i xviewPortSize) : viewportSize(xviewPortSize)
+	Camera(Vector2i xviewPortSize) : viewportSize(xviewPortSize), position(0.0f,0.0f,5.0f)
 	{
-		m_RayDirections = new Vector3f[xviewPortSize.x * xviewPortSize.y];
-		transform.SetPosition(Vector3f(0,0,1));
 		RecalculateProjection();
+		RecalculateView();
+	}
+	
+	void Update()
+	{
+		if (!Window::GetMouseButton(MouseButton_Right)) return;
+		
+		float dt = (float)Window::DeltaTime();
+		float speed = dt * (1.0f + Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
+
+		if (Window::GetKey(KeyCode_D)) angle += speed;
+		if (Window::GetKey(KeyCode_A)) angle -= speed;
+		
+		position = Vector3f::Lerp(position, Vector3f(sin(angle)*5.0f, 0.0f, cos(angle)*5.0f), 8.0f * dt);
+		
 		RecalculateView();
 	}
 
@@ -46,7 +60,7 @@ struct Camera
 
 	void RecalculateView()
 	{
-		view = Matrix4::LookAtLH(transform.position, Vector3f(0, 0, -1), Vector3f::Up());
+		view = Matrix4::LookAtLH(position, Vector3f(-sin(angle), 0.0f, -cos(angle)), Vector3f(0, 1.0f,0));
 		inverseView = Matrix4::Inverse(view);
 	}
 
@@ -58,6 +72,6 @@ struct Camera
 		target /= target.w;
 		target = inverseView * target.Normalized();
 		target.y = 0.0f - target.y;
-		return Ray(transform.position, Vector3f(target.x, target.y, target.z));
+		return Ray(position, Vector3f(target.x, target.y, target.z));
 	}
 };

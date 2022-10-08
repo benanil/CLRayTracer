@@ -2,7 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <Windows.h>
-
+#include "Renderer.hpp"
 
 // Window dimensions
 namespace Window
@@ -41,13 +41,13 @@ namespace Window
 		POINT point;
 		GetCursorPos(&point);
 
-		if (point.x > monitorScale.x - 2) { SetMouseMonitorPos({ 2, point.y }); }
-		if (point.y > monitorScale.y - 2) { SetMouseMonitorPos({ point.x, 2 }); }
-		if (point.x < 2) { SetMouseMonitorPos({ monitorScale.x - 3, point.y }); }
-		if (point.y < 2) { SetMouseMonitorPos({ point.x, monitorScale.y - 3 }); }
+		if (point.x > monitorScale.x - 2) { SetMouseScreenPos({ 2, point.y }); }
+		if (point.y > monitorScale.y - 2) { SetMouseScreenPos({ point.x, 2 }); }
+		if (point.x < 2) { SetMouseScreenPos({ monitorScale.x - 3, point.y }); }
+		if (point.y < 2) { SetMouseScreenPos({ point.x, monitorScale.y - 3 }); }
 	}
 
-	Vector2i GetMouseMonitorPos() {
+	Vector2i GetMouseScreenPos() {
 		POINT point;
 		GetCursorPos(&point);
 		return Vector2i(point.x, point.y);
@@ -59,7 +59,7 @@ namespace Window
 		return Vector2f(x, y);
 	}
 	
-	void SetMouseMonitorPos(Vector2i pos) {
+	void SetMouseScreenPos(Vector2i pos) {
 		SetCursorPos(pos.x, pos.y);
 	}
 
@@ -67,6 +67,14 @@ namespace Window
 		double x = pos.x, y = pos.y;
 		glfwSetCursorPos(window, x, y);
 	}
+
+	bool GetKey(int keyCode)     { return glfwGetKey(window, keyCode) == GLFW_PRESS;   }
+	bool GetKeyUp(int keyCode)   { return glfwGetKey(window, keyCode) == GLFW_RELEASE; }
+	bool GetKeyDown(int keyCode) { return  !GetKey(keyCode) && !GetKeyUp(keyCode); }
+
+	bool GetMouseButton(int keyCode)     { return glfwGetMouseButton(window, keyCode) == GLFW_PRESS; }
+	bool GetMouseButtonUp(int keyCode)   { return glfwGetMouseButton(window, keyCode) == GLFW_RELEASE; }
+	bool GetMouseButtonDown(int keyCode) { return !GetMouseButton(keyCode) && !GetMouseButtonUp(keyCode); }
 
 	void ChangeName(float ms) 
 	{
@@ -78,8 +86,7 @@ namespace Window
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, GL_TRUE);
+	Renderer::OnKeyPressed(key, action);
 }
 
 int Window::Create()

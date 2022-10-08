@@ -23,7 +23,7 @@ FINLINE bool IsEqual(const double x, const double y) noexcept { return fabs (x-y
 template<typename RealT>
 FINLINE RealT Repeat(const RealT t, const RealT length) noexcept
 {
-	return Clamp(t - floorf(t / length) * length, 0.0, length);
+	return Clamp<RealT>(t - floorf(t / length) * length, 0.0, length);
 }
 
 template<typename RealT>

@@ -25,7 +25,6 @@ char* Helper::ReadAllText(const char* path)
 	std::ifstream f(path, std::ios::in | std::ios::binary | std::ios::failbit);
 	SkipBOM(f);
 
-	cl_int clerr;
 	const uintmax_t sz = std::filesystem::file_size(path);
 	char* code = new char[sz+1];
 	f.read(code, sz);

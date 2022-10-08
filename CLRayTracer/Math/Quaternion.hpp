@@ -120,7 +120,7 @@ AX_ALIGNED(16) struct Quaternion
 		x *= 0.5f; y *= 0.5f; z *= 0.5f;
 		float cy, sy;
 		ScalarSinCos(&sy, &cy, x);
-		float cp = cos(y), sp = sin(y);
+		float cp, sp;
 		ScalarSinCos(&sp, &cp, y);
 		float cr, sr;
 		ScalarSinCos(&sr, &cr, z);

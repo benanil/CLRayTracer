@@ -573,15 +573,10 @@ struct Matrix4
 
 	FINLINE static Vector4 VECTORCALL Vector4Transform(Vector4 v, const Matrix4 m)
 	{
-		__m128 v0 = _mm_shuffle_ps(v, v, _MM_SHUFFLE(0, 0, 0, 0));
-		__m128 v1 = _mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 1, 1, 1));
-		__m128 v2 = _mm_shuffle_ps(v, v, _MM_SHUFFLE(2, 2, 2, 2));
-		__m128 v3 = _mm_shuffle_ps(v, v, _MM_SHUFFLE(3, 3, 3, 3));
-
-		v0 = _mm_mul_ps(m.r[0], v0);
-		v1 = _mm_mul_ps(m.r[1], v1);
-		v2 = _mm_mul_ps(m.r[2], v2);
-		v3 = _mm_mul_ps(m.r[3], v3);
+		__m128 v0 = _mm_mul_ps(m.r[0], _mm_shuffle_ps(v, v, _MM_SHUFFLE(0, 0, 0, 0)));
+		__m128 v1 = _mm_mul_ps(m.r[1], _mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 1, 1, 1)));
+		__m128 v2 = _mm_mul_ps(m.r[2], _mm_shuffle_ps(v, v, _MM_SHUFFLE(2, 2, 2, 2)));
+		__m128 v3 = _mm_mul_ps(m.r[3], _mm_shuffle_ps(v, v, _MM_SHUFFLE(3, 3, 3, 3)));
 
 		__m128 a0 = _mm_add_ps(v0, v1);
 		__m128 a1 = _mm_add_ps(v2, v3);

@@ -45,7 +45,6 @@ struct Vector2
 	Vector2 operator -= (T o) { x -= o; y -= o; return *this; }
 };
 
-__pragma(pack(push, 1))
 struct Vector3f
 {
 	float x, y, z;
@@ -121,7 +120,16 @@ struct Vector3f
 	FINLINE static constexpr Vector3f Forward()  { return Vector3f( 0,  0,  1); } 
 	FINLINE static constexpr Vector3f Backward() { return Vector3f( 0,  0, -1); } 
 };
-__pragma(pack(pop))
 
 using Vector2f = Vector2<float>;
 using Vector2i = Vector2<int>;
+
+inline Vector2f ToVector2f(const Vector2i& vec)
+{
+	return Vector2f((float)vec.x, (float)vec.y);
+}
+
+inline Vector2i ToVector2f(const Vector2f& vec)
+{
+	return Vector2i((int)vec.x, (int)vec.y);
+}
