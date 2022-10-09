@@ -9,7 +9,7 @@ namespace Window
 {
 	GLFWwindow* window;
 
-	unsigned Width = 800, Height = 600;
+	int Width = 900, Height = 700;
 	Vector2i monitorScale;
 
 	double dt;
@@ -71,11 +71,17 @@ namespace Window
 		sprintf(str, "CLRenderer ms: %.3f", ms);
 		glfwSetWindowTitle(window, str);
 	}
-}
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
-{
-	Renderer::OnKeyPressed(key, action);
+	void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode)
+	{
+		Renderer::OnKeyPressed(key, action);
+	}
+
+	void WindowCallback(GLFWwindow* window, int width, int height)
+	{
+		Width = width; Height = height;
+		Renderer::OnWindowResize(width, height);
+	}
 }
 
 int Window::Create()
@@ -86,14 +92,14 @@ int Window::Create()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
 	// Create a GLFWwindow object that we can use for GLFW's functions
 	window = glfwCreateWindow(Width, Height, "CLRayTracer", nullptr, nullptr);
 	if (!window) return 0;
 	glfwMakeContextCurrent(window);
 	// Set the required callback functions
-	glfwSetKeyCallback(window, key_callback);
+	glfwSetKeyCallback(window, Window::KeyCallback);
+	glfwSetWindowSizeCallback(window, Window::WindowCallback);
 
 	const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	monitorScale.x = vidMode->width;

@@ -158,7 +158,7 @@ kernel void Trace
 	if (besthit.distance >= 9998.0f)
 	{
 	    float theta = acos(ray.direction.y) / M_PI_F;
-        float phi = atan2(ray.direction.x, ray.direction.z) / -M_PI_F ;
+        float phi = atan2(ray.direction.x, -ray.direction.z) / -M_PI_F ;
 		pixel_color = read_imagef(skybox, sampler, (float2)(phi, theta));;
 	}
 

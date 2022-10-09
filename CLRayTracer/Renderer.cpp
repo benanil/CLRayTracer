@@ -60,6 +60,17 @@ void main()\
 typedef void (*GLFWglproc)(void);
 extern "C" {  GLFWglproc glfwGetProcAddress(const char* procname); }
 
+void CreateGLTexture(GLuint& texture, int width, int height, void* data = nullptr)
+{
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+}
+
 int Renderer::Initialize()
 {
 	camera = Camera(Window::GetWindowScale());
@@ -99,23 +110,10 @@ int Renderer::Initialize()
 		unsigned char* skyboxData = stbi_load("../Assets/cape_hill_4k.jpg", &width, &height, &channels, 3);
 		if (!skyboxData) { AXERROR("cannot load skybox image"); return 0; }
 		
-		glGenTextures(1, &skyboxTexture);
-		glBindTexture(GL_TEXTURE_2D, skyboxTexture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, skyboxData);
+		CreateGLTexture(skyboxTexture, width, height, skyboxData);
+		CreateGLTexture(screenTexture, Window::GetWidth(), Window::GetHeight());
 		glActiveTexture(GL_TEXTURE0);
 		
-		glGenTextures(1, &screenTexture);
-		glBindTexture(GL_TEXTURE_2D, screenTexture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Window::GetWidth(), Window::GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
 		// create empty vao unfortunately this step is necessary for ogl 3.2
 		glGenVertexArrays(1, &VAO);
 		glBindVertexArray(VAO);
@@ -191,6 +189,23 @@ int Renderer::Initialize()
 
 void Renderer::OnKeyPressed(int keyCode, int action) {}
 
+static cl_event event;
+
+void Renderer::OnWindowResize(int width, int height)
+{
+	clFinish(command_queue); 
+	cl_int clerr;
+	if (clReleaseMemObject(clglTexture) != CL_SUCCESS) { AXERROR("couldn't resize!"); exit(0); }
+	if (clReleaseMemObject(rayMem) != CL_SUCCESS)      { AXERROR("couldn't resize!"); exit(0); }
+	glDeleteTextures(1, &screenTexture);
+	rayMem = clglTexture = nullptr;
+	screenTexture = 0u;
+	CreateGLTexture(screenTexture, width, height);
+	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr);  assert(clerr == 0);
+	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * width * height, nullptr, &clerr); assert(clerr == 0);
+	glViewport(0, 0, width, height);
+}
+
 void Renderer::Render()
 {
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -209,7 +224,7 @@ void Renderer::Render()
 	trace_args.time = Window::GetTime();
 
 	cl_int clerr;
-	cl_event event;
+
 	// prepare ray generation kernel
 	clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &windowSize.x);                 assert(clerr == 0);
 	clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &windowSize.y);                 assert(clerr == 0);
