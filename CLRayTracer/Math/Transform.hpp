@@ -51,35 +51,8 @@ public:
 	Vector3f GetEuler()       const { return Quaternion::ToEulerAngles(rotation); }
 	Vector3f GetEulerDegree() const { return Quaternion::ToEulerAngles(rotation) * RadToDeg; }
 
-	Vector3f GetForward() const {
-		Vector3f res;
-		SSEStoreVector3(&res.x,
-			Quaternion::MulVec3(Vector432F( 0, 0, -1, 0), Quaternion::Conjugate(rotation))
-		);
-		return res; 
-	}
-
-	Vector3f GetRight() const {
-		Vector3f res;
-		SSEStoreVector3(&res.x, 
-			Quaternion::MulVec3(Vector432F( 1, 0, 0, 0), Quaternion::Conjugate(rotation))
-		);
-		return res; 
-	}
-
-	Vector3f GetLeft() const {
-		Vector3f res;
-		SSEStoreVector3(&res.x,
-			Quaternion::MulVec3(Vector432F(-1, 0, 0, 0), Quaternion::Conjugate(rotation))
-		); 
-		return res; 
-	}
-
-	Vector3f GetUp() const {
-		Vector3f res;
-		SSEStoreVector3(&res.x,
-			Quaternion::MulVec3(Vector432F( 0, 1, 0, 0), Quaternion::Conjugate(rotation))
-		);
-		return res; 
-	}
+	Vector3f GetForward() const { return rotation.GetForward();  }
+	Vector3f GetRight()   const { return rotation.GetRight();    }
+	Vector3f GetLeft()    const { return rotation.GetLeft();     }
+	Vector3f GetUp()      const { return rotation.GetUp();       }
 };

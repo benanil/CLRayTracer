@@ -16,7 +16,6 @@
 #include <stb_image.h>
 
 // todo: 
-//		 input callbacks
 //       window resize callback
 
 namespace Renderer

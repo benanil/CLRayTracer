@@ -71,7 +71,7 @@ RayHit CreateRayHit()
 
 float4 MatMul(Matrix4 m, float4 v)
 {
-	return (m.x * v.xxxx) + (m.y * v.yyyy) + (m.z * v.zzzz) + (m.w * v.wwww);
+	return m.x * v.xxxx + m.y * v.yyyy + m.z * v.zzzz + m.w * v.wwww;
 }
 
 void IntersectSphere(float3 center, float radius, Ray ray, RayHit* besthit) 
@@ -144,7 +144,7 @@ kernel void Trace
 {
 	const int i = get_global_id(0), j = get_global_id(1);
 	constant float gamma = 1.2f;
-	constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
+	constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT  | CLK_FILTER_NEAREST;
 
 	Ray ray;
 	ray.origin = vload3(0, trace_args.cameraPos);
@@ -159,7 +159,7 @@ kernel void Trace
 	{
 	    float theta = acos(ray.direction.y) / M_PI_F;
         float phi = atan2(ray.direction.x, ray.direction.z) / -M_PI_F ;
-		pixel_color = read_imagef(skybox, sampler, (float2)(phi, theta));//(float4)(theta, phi, 0.0f, 1.0f);
+		pixel_color = read_imagef(skybox, sampler, (float2)(phi, theta));;
 	}
 
 	write_imagef(inout, (int2)(i, j), pixel_color);

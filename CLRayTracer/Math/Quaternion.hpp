@@ -116,20 +116,14 @@ AX_ALIGNED(16) struct Quaternion
 
 	FINLINE Quaternion static FromEuler(float x, float y, float z) noexcept
 	{
-		// Abbreviations for the various angular functions
 		x *= 0.5f; y *= 0.5f; z *= 0.5f;
-		float cy, sy;
-		ScalarSinCos(&sy, &cy, x);
-		float cp, sp;
-		ScalarSinCos(&sp, &cp, y);
-		float cr, sr;
-		ScalarSinCos(&sr, &cr, z);
-
+		float cx = cosf(x), cy = cosf(y), cz = cosf(z);
+		float sx = sinf(x), sy = sinf(y), sz = sinf(z);
 		Quaternion q;
-		q.w = cr * cp * cy + sr * sp * sy;
-		q.x = sr * cp * cy - cr * sp * sy;
-		q.y = cr * sp * cy + sr * cp * sy;
-		q.z = cr * cp * sy - sr * sp * cy;
+		q.x = sx * cy * cz - cx * sy * sz;
+		q.y = cx * sy * cz + sx * cy * sz;
+		q.z = cx * cy * sz - sx * sy * cz;
+		q.w = cx * cy * cz + sx * sy * sz;
 		return q;
 	}
 
@@ -172,8 +166,40 @@ AX_ALIGNED(16) struct Quaternion
 
 	FINLINE static __m128 VECTORCALL Conjugate(const __m128 vec)
 	{
-		static const Vector432F NegativeOne3 = { 1.0f,-1.0f,-1.0f,-1.0f};
+		static const Vector432F NegativeOne3 = { -1.0f,-1.0f,-1.0f, 1.0f};
 		return _mm_mul_ps(vec, NegativeOne3);
+	}
+
+	Vector3f GetForward() const {
+		Vector3f res;
+		SSEStoreVector3(&res.x,
+		    Quaternion::MulVec3(Vector432F( 0, 0, -1, 0), Quaternion::Conjugate(vec))
+		);
+		return res; 
+	}
+
+	Vector3f GetRight() const {
+		Vector3f res;
+		SSEStoreVector3(&res.x, 
+		    Quaternion::MulVec3(Vector432F( 1, 0, 0, 0), Quaternion::Conjugate(vec))
+		);
+		return res; 
+	}
+
+	Vector3f GetLeft() const {
+		Vector3f res;
+		SSEStoreVector3(&res.x,
+		    Quaternion::MulVec3(Vector432F(-1, 0, 0, 0), Quaternion::Conjugate(vec))
+		); 
+		return res; 
+	}
+
+	Vector3f GetUp() const {
+		Vector3f res;
+		SSEStoreVector3(&res.x,
+		    Quaternion::MulVec3(Vector432F( 0, 1, 0, 0), Quaternion::Conjugate(vec))
+		);
+		return res; 
 	}
 
 	FINLINE Quaternion operator *  (const Quaternion& b) { return Mul(this->vec, b.vec); }

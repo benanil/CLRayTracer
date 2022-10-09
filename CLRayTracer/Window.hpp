@@ -16,7 +16,6 @@ namespace Window
 	double DeltaTime();
 
 	// INPUT
-	void InfiniteMouse();
 	Vector2i GetWindowScale();
 	Vector2i GetMonitorScale();
 	Vector2i GetMouseScreenPos();

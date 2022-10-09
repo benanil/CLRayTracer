@@ -36,17 +36,6 @@ namespace Window
 		return s;
 	}
 
-	void InfiniteMouse()
-	{
-		POINT point;
-		GetCursorPos(&point);
-
-		if (point.x > monitorScale.x - 2) { SetMouseScreenPos({ 2, point.y }); }
-		if (point.y > monitorScale.y - 2) { SetMouseScreenPos({ point.x, 2 }); }
-		if (point.x < 2) { SetMouseScreenPos({ monitorScale.x - 3, point.y }); }
-		if (point.y < 2) { SetMouseScreenPos({ point.x, monitorScale.y - 3 }); }
-	}
-
 	Vector2i GetMouseScreenPos() {
 		POINT point;
 		GetCursorPos(&point);

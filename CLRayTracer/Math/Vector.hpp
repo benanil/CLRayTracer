@@ -50,7 +50,7 @@ struct Vector3f
 	float x, y, z;
 
 	Vector3f() : x(0), y(0), z(0) { }
-	constexpr Vector3f(float scale) : x(scale), y(scale), z(scale) { }
+	explicit constexpr Vector3f(float scale) : x(scale), y(scale), z(scale) { }
 	constexpr Vector3f(float a, float b, float c) : x(a), y(b), z(c) { }
 	
 	float Length() const { return sqrtf(LengthSquared()); }
@@ -86,6 +86,11 @@ struct Vector3f
 		return Vector3f(a.y * b.z - b.y * a.z,
 			            a.z * b.x - b.z * a.x,
 			            a.x * b.y - b.x * a.y);
+	}
+
+	static Vector3f Reflect(const Vector3f& in, const Vector3f& normal)
+	{
+		return in - normal * Dot(normal, in) * 2.0f;
 	}
 
 	static Vector3f Normalize(const Vector3f& a)  {
