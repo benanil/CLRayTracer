@@ -67,8 +67,8 @@ struct Matrix4
 {
 	union
 	{
-		__m128 r[4];
-		float m[4][4];
+		struct { __m128 r[4]; };
+		struct { float m[4][4]; };
 	};
 
 	Matrix4()
@@ -79,13 +79,18 @@ struct Matrix4
 		r[3] = g_XMIdentityR3;
 	}
 
+	explicit Matrix4(float s) 
+	{
+		for (int i = 0; i < 16; ++i) m[0][i] = s;
+	}
+
 	Matrix4(__m128 x, __m128 y, __m128 z, __m128 w)
 	{
 		r[0] = x; r[1] = y; r[2] = z; r[3] = w;
 	}
 
-	const float* operator [] (int index) const { return m[index]; }
-	float* operator [] (int index) { return m[index]; }
+	const __m128& operator [] (int index) const { return r[index]; }
+	__m128& operator [] (int index) { return r[index]; }
 	
 	Vector4 VECTORCALL  operator *  (const Vector3f v)  noexcept { return Vector3Transform(v, *this); };
 	Vector4 VECTORCALL  operator *  (const Vector4 v)   noexcept { return Vector4Transform(v, *this); };
@@ -134,25 +139,28 @@ struct Matrix4
 	}
 
 	// please assign normalized vectors
-	FINLINE static Matrix4 VECTORCALL LookAtLH(Vector3f EyePosition, Vector3f EyeDirection, const Vector3f& UpDirection)
+	FINLINE static Matrix4 VECTORCALL LookAtRH(Vector3f eye, Vector3f center, const Vector3f& up)
 	{
-		__m128 R2 = _mm_loadu_ps(&EyeDirection.x);
+		Vector4 NegEyePosition;
+		Vector4 D0, D1, D2;
+		Vector4 R0, R1;
 
-		__m128 R0 = SSEVector3Cross(_mm_loadu_ps(&UpDirection.x), R2);
-		R0 = SSEVector3Normalize(R0);
+		Vector4 EyePosition  = _mm_loadu_ps(&eye.x);
+		Vector4 EyeDirection = _mm_sub_ps(_mm_setzero_ps(), _mm_loadu_ps(&center.x));
+		Vector4 UpDirection  = _mm_loadu_ps(&up.x);
 
-		__m128 R1 = SSEVector3Cross(R2, R0);
+		R0 = SSEVector3Cross(UpDirection, EyeDirection);
+		R1 = SSEVector3Cross(EyeDirection, R0);
 
-		__m128 NegEyePosition = _mm_sub_ps(_mm_setzero_ps(), _mm_loadu_ps(&EyePosition.x)); // negate
+		NegEyePosition = _mm_sub_ps(_mm_setzero_ps(), EyePosition);
 
-		__m128 D0 = SSEVector3Dot(R0, NegEyePosition);
-		__m128 D1 = SSEVector3Dot(R1, NegEyePosition);
-		__m128 D2 = SSEVector3Dot(R2, NegEyePosition);
-
+		D0 = SSEVector3Dot(R0, NegEyePosition);
+		D1 = SSEVector3Dot(R1, NegEyePosition);
+		D2 = SSEVector3Dot(EyeDirection, NegEyePosition);
 		Matrix4 M;
-		M.r[0] = SSESelect(D0, R0, g_XMSelect1110.vec);
-		M.r[1] = SSESelect(D1, R1, g_XMSelect1110.vec);
-		M.r[2] = SSESelect(D2, R2, g_XMSelect1110.vec);
+		M.r[0] = SSESelect(D0, R0, g_XMSelect1110);
+		M.r[1] = SSESelect(D1, R1, g_XMSelect1110);
+		M.r[2] = SSESelect(D2, EyeDirection, g_XMSelect1110);
 		M.r[3] = g_XMIdentityR3;
 		return Matrix4::Transpose(M);
 	}
@@ -244,52 +252,26 @@ struct Matrix4
 	}
 
 
-	FINLINE static Matrix4 VECTORCALL PerspectiveFovLH(float FovAngleY, float AspectRatio, float NearZ, float FarZ)
+	FINLINE static Matrix4 VECTORCALL PerspectiveFovRH(float fov, float width, float height, float zNear, float zFar)
 	{
-		const float SinFov = sinf(0.5f * FovAngleY);
-		const float CosFov = cosf(0.5f * FovAngleY);
-
-		//ScalarSinCos(&SinFov, &CosFov, 0.5f * FovAngleY);
-
-		float fRange = FarZ / (FarZ - NearZ);
-		// Note: This is recorded on the stack
-		float Height = CosFov / SinFov;
-		__m128 rMem = {
-			Height / AspectRatio,
-			Height,
-			fRange,
-			-fRange * NearZ
-		};
-		// Copy from memory to SSE register
-		__m128 vValues = rMem;
-		__m128 vTemp = _mm_setzero_ps();
-		// Copy x only
-		vTemp = _mm_move_ss(vTemp, vValues);
-		// CosFov / SinFov,0,0,0
-		Matrix4 M;
-		M.r[0] = vTemp;
-		// 0,Height / AspectRatio,0,0
-		vTemp = vValues;
-		vTemp = _mm_and_ps(vTemp, g_XMMaskY);
-		M.r[1] = vTemp;
-		// x=fRange,y=-fRange * NearZ,0,1.0f
-		vTemp = _mm_setzero_ps();
-		vValues = _mm_shuffle_ps(vValues, g_XMIdentityR3, _MM_SHUFFLE(3, 2, 3, 2));
-		// 0,0,fRange,1.0f
-		vTemp = _mm_shuffle_ps(vTemp, vValues, _MM_SHUFFLE(3, 0, 0, 0));
-		M.r[2] = vTemp;
-		// 0,0,-fRange * NearZ,0.0f
-		vTemp = _mm_shuffle_ps(vTemp, vValues, _MM_SHUFFLE(2, 1, 0, 0));
-		M.r[3] = vTemp;
+		const float rad = fov;
+		const float h = cosf(0.5f * rad) / sinf(0.5f * rad);
+		const float w = h * height / width; ///todo max(width , Height) / min(width , Height)?
+		Matrix4 M(0.0f);
+		M.m[0][0] = w;
+		M.m[1][1] = h;
+		M.m[2][2] = -(zFar + zNear) / (zFar - zNear);
+		M.m[2][3] = -1.0f;
+		M.m[3][2] = -(2.0f * zFar * zNear) / (zFar - zNear);
 		return M;
 	}
 
 	FINLINE static Matrix4 VECTORCALL Transpose(const Matrix4 M)
 	{
-		__m128 vTemp1 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(1, 0, 1, 0));
-		__m128 vTemp3 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(3, 2, 3, 2));
-		__m128 vTemp2 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(1, 0, 1, 0));
-		__m128 vTemp4 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(3, 2, 3, 2));
+		const __m128 vTemp1 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(1, 0, 1, 0));
+		const __m128 vTemp3 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(3, 2, 3, 2));
+		const __m128 vTemp2 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(1, 0, 1, 0));
+		const __m128 vTemp4 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(3, 2, 3, 2));
 		Matrix4 mResult;
 		mResult.r[0] = _mm_shuffle_ps(vTemp1, vTemp2, _MM_SHUFFLE(2, 0, 2, 0));
 		mResult.r[1] = _mm_shuffle_ps(vTemp1, vTemp2, _MM_SHUFFLE(3, 1, 3, 1));
@@ -299,191 +281,227 @@ struct Matrix4
 	}
 
 	// from directx math:  xnamathmatrix.inl
-	inline Matrix4 static VECTORCALL Inverse(const Matrix4 M) noexcept
+	inline Matrix4 static VECTORCALL Inverse(const Matrix4 in) noexcept
 	{
-		__m128 vTemp1 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(1, 0, 1, 0));
-		__m128 vTemp3 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(3, 2, 3, 2));
-		__m128 vTemp2 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(1, 0, 1, 0));
-		__m128 vTemp4 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(3, 2, 3, 2));
-
-		Matrix4 MT;
-		MT.r[0] = _mm_shuffle_ps(vTemp1, vTemp2, _MM_SHUFFLE(2, 0, 2, 0));
-		MT.r[1] = _mm_shuffle_ps(vTemp1, vTemp2, _MM_SHUFFLE(3, 1, 3, 1));
-		MT.r[2] = _mm_shuffle_ps(vTemp3, vTemp4, _MM_SHUFFLE(2, 0, 2, 0));
-		MT.r[3] = _mm_shuffle_ps(vTemp3, vTemp4, _MM_SHUFFLE(3, 1, 3, 1));
-
-		__m128 V00 = _mm_permute_ps(MT.r[2], _MM_SHUFFLE(1, 1, 0, 0));
-		__m128 V10 = _mm_permute_ps(MT.r[3], _MM_SHUFFLE(3, 2, 3, 2));
-		__m128 V01 = _mm_permute_ps(MT.r[0], _MM_SHUFFLE(1, 1, 0, 0));
-		__m128 V11 = _mm_permute_ps(MT.r[1], _MM_SHUFFLE(3, 2, 3, 2));
-		__m128 V02 = _mm_shuffle_ps(MT.r[2], MT.r[0], _MM_SHUFFLE(2, 0, 2, 0));
-		__m128 V12 = _mm_shuffle_ps(MT.r[3], MT.r[1], _MM_SHUFFLE(3, 1, 3, 1));
-
-		__m128 D0 = _mm_mul_ps(V00, V10);
-		__m128 D1 = _mm_mul_ps(V01, V11);
-		__m128 D2 = _mm_mul_ps(V02, V12);
-
-		V00 = _mm_permute_ps(MT.r[2], _MM_SHUFFLE(3, 2, 3, 2));
-		V10 = _mm_permute_ps(MT.r[3], _MM_SHUFFLE(1, 1, 0, 0));
-		V01 = _mm_permute_ps(MT.r[0], _MM_SHUFFLE(3, 2, 3, 2));
-		V11 = _mm_permute_ps(MT.r[1], _MM_SHUFFLE(1, 1, 0, 0));
-		V02 = _mm_shuffle_ps(MT.r[2], MT.r[0], _MM_SHUFFLE(3, 1, 3, 1));
-		V12 = _mm_shuffle_ps(MT.r[3], MT.r[1], _MM_SHUFFLE(2, 0, 2, 0));
-
-		D0 = _mm_fmadd_ps(V00, V10, D0);
-		D1 = _mm_fmadd_ps(V01, V11, D1);
-		D2 = _mm_fmadd_ps(V02, V12, D2);
-		// V11 = D0Y,D0W,D2Y,D2Y
-		V11 = _mm_shuffle_ps(D0, D2, _MM_SHUFFLE(1, 1, 3, 1));
-		V00 = _mm_permute_ps(MT.r[1], _MM_SHUFFLE(1, 0, 2, 1));
-		V10 = _mm_shuffle_ps(V11, D0, _MM_SHUFFLE(0, 3, 0, 2));
-		V01 = _mm_permute_ps(MT.r[0], _MM_SHUFFLE(0, 1, 0, 2));
-		V11 = _mm_shuffle_ps(V11, D0, _MM_SHUFFLE(2, 1, 2, 1));
-		// V13 = D1Y,D1W,D2W,D2W
-		__m128 V13 = _mm_shuffle_ps(D1, D2, _MM_SHUFFLE(3, 3, 3, 1));
-		V02 = _mm_permute_ps(MT.r[3], _MM_SHUFFLE(1, 0, 2, 1));
-		V12 = _mm_shuffle_ps(V13, D1, _MM_SHUFFLE(0, 3, 0, 2));
-		__m128 V03 = _mm_permute_ps(MT.r[2], _MM_SHUFFLE(0, 1, 0, 2));
-		V13 = _mm_shuffle_ps(V13, D1, _MM_SHUFFLE(2, 1, 2, 1));
-
-		__m128 C0 = _mm_mul_ps(V00, V10);
-		__m128 C2 = _mm_mul_ps(V01, V11);
-		__m128 C4 = _mm_mul_ps(V02, V12);
-		__m128 C6 = _mm_mul_ps(V03, V13);
-
-		// V11 = D0X,D0Y,D2X,D2X
-		V11 = _mm_shuffle_ps(D0, D2, _MM_SHUFFLE(0, 0, 1, 0));
-		V00 = _mm_permute_ps(MT.r[1], _MM_SHUFFLE(2, 1, 3, 2));
-		V10 = _mm_shuffle_ps(D0, V11, _MM_SHUFFLE(2, 1, 0, 3));
-		V01 = _mm_permute_ps(MT.r[0], _MM_SHUFFLE(1, 3, 2, 3));
-		V11 = _mm_shuffle_ps(D0, V11, _MM_SHUFFLE(0, 2, 1, 2));
-		// V13 = D1X,D1Y,D2Z,D2Z
-		V13 = _mm_shuffle_ps(D1, D2, _MM_SHUFFLE(2, 2, 1, 0));
-		V02 = _mm_permute_ps(MT.r[3], _MM_SHUFFLE(2, 1, 3, 2));
-		V12 = _mm_shuffle_ps(D1, V13, _MM_SHUFFLE(2, 1, 0, 3));
-		V03 = _mm_permute_ps(MT.r[2], _MM_SHUFFLE(1, 3, 2, 3));
-		V13 = _mm_shuffle_ps(D1, V13, _MM_SHUFFLE(0, 2, 1, 2));
-
-		C0 = _mm_fnmadd_ps(V00, V10, C0);
-		C2 = _mm_fnmadd_ps(V01, V11, C2);
-		C4 = _mm_fnmadd_ps(V02, V12, C4);
-		C6 = _mm_fnmadd_ps(V03, V13, C6);
-
-		V00 = _mm_permute_ps(MT.r[1], _MM_SHUFFLE(0, 3, 0, 3));
-		// V10 = D0Z,D0Z,D2X,D2Y
-		V10 = _mm_shuffle_ps(D0, D2, _MM_SHUFFLE(1, 0, 2, 2));
-		V10 = _mm_permute_ps(V10, _MM_SHUFFLE(0, 2, 3, 0));
-		V01 = _mm_permute_ps(MT.r[0], _MM_SHUFFLE(2, 0, 3, 1));
-		// V11 = D0X,D0W,D2X,D2Y
-		V11 = _mm_shuffle_ps(D0, D2, _MM_SHUFFLE(1, 0, 3, 0));
-		V11 = _mm_permute_ps(V11, _MM_SHUFFLE(2, 1, 0, 3));
-		V02 = _mm_permute_ps(MT.r[3], _MM_SHUFFLE(0, 3, 0, 3));
-		// V12 = D1Z,D1Z,D2Z,D2W
-		V12 = _mm_shuffle_ps(D1, D2, _MM_SHUFFLE(3, 2, 2, 2));
-		V12 = _mm_permute_ps(V12, _MM_SHUFFLE(0, 2, 3, 0));
-		V03 = _mm_permute_ps(MT.r[2], _MM_SHUFFLE(2, 0, 3, 1));
-		// V13 = D1X,D1W,D2Z,D2W
-		V13 = _mm_shuffle_ps(D1, D2, _MM_SHUFFLE(3, 2, 3, 0));
-		V13 = _mm_permute_ps(V13, _MM_SHUFFLE(2, 1, 0, 3));
-
-		V00 = _mm_mul_ps(V00, V10);
-		V01 = _mm_mul_ps(V01, V11);
-		V02 = _mm_mul_ps(V02, V12);
-		V03 = _mm_mul_ps(V03, V13);
-		__m128 C1 = _mm_sub_ps(C0, V00);
-		C0 = _mm_add_ps(C0, V00);
-		__m128 C3 = _mm_add_ps(C2, V01);
-		C2 = _mm_sub_ps(C2, V01);
-		__m128 C5 = _mm_sub_ps(C4, V02);
-		C4 = _mm_add_ps(C4, V02);
-		__m128 C7 = _mm_add_ps(C6, V03);
-		C6 = _mm_sub_ps(C6, V03);
-
-		C0 = _mm_shuffle_ps(C0, C1, _MM_SHUFFLE(3, 1, 2, 0));
-		C2 = _mm_shuffle_ps(C2, C3, _MM_SHUFFLE(3, 1, 2, 0));
-		C4 = _mm_shuffle_ps(C4, C5, _MM_SHUFFLE(3, 1, 2, 0));
-		C6 = _mm_shuffle_ps(C6, C7, _MM_SHUFFLE(3, 1, 2, 0));
-		C0 = _mm_permute_ps(C0, _MM_SHUFFLE(3, 1, 2, 0));
-		C2 = _mm_permute_ps(C2, _MM_SHUFFLE(3, 1, 2, 0));
-		C4 = _mm_permute_ps(C4, _MM_SHUFFLE(3, 1, 2, 0));
-		C6 = _mm_permute_ps(C6, _MM_SHUFFLE(3, 1, 2, 0));
-		// Get the determinant
-		__m128 vTemp = Vector4::Dot(C0, MT.r[0]);
-		vTemp = _mm_div_ps(g_XMOne, vTemp);
-		Matrix4 mResult;
-		mResult.r[0] = _mm_mul_ps(C0, vTemp);
-		mResult.r[1] = _mm_mul_ps(C2, vTemp);
-		mResult.r[2] = _mm_mul_ps(C4, vTemp);
-		mResult.r[3] = _mm_mul_ps(C6, vTemp);
-		return mResult;
+		__m128 Fac0;
+		{
+			__m128 Swp0a = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(3, 3, 3, 3));
+			__m128 Swp0b = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(2, 2, 2, 2));
+		
+			__m128 Swp00 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 Swp01 = _mm_shuffle_ps(Swp0a, Swp0a, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp02 = _mm_shuffle_ps(Swp0b, Swp0b, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp03 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(3, 3, 3, 3));
+		
+			__m128 Mul00 = _mm_mul_ps(Swp00, Swp01);
+			__m128 Mul01 = _mm_mul_ps(Swp02, Swp03);
+			Fac0 = _mm_sub_ps(Mul00, Mul01);
+		}
+		
+		__m128 Fac1;
+		{
+			__m128 Swp0a = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(3, 3, 3, 3));
+			__m128 Swp0b = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(1, 1, 1, 1));
+		
+			__m128 Swp00 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 Swp01 = _mm_shuffle_ps(Swp0a, Swp0a, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp02 = _mm_shuffle_ps(Swp0b, Swp0b, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp03 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(3, 3, 3, 3));
+		
+			__m128 Mul00 = _mm_mul_ps(Swp00, Swp01);
+			__m128 Mul01 = _mm_mul_ps(Swp02, Swp03);
+			Fac1 = _mm_sub_ps(Mul00, Mul01);
+		}
+		
+		__m128 Fac2;
+		{
+			__m128 Swp0a = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 Swp0b = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(1, 1, 1, 1));
+		
+			__m128 Swp00 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 Swp01 = _mm_shuffle_ps(Swp0a, Swp0a, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp02 = _mm_shuffle_ps(Swp0b, Swp0b, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp03 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(2, 2, 2, 2));
+		
+			__m128 Mul00 = _mm_mul_ps(Swp00, Swp01);
+			__m128 Mul01 = _mm_mul_ps(Swp02, Swp03);
+			Fac2 = _mm_sub_ps(Mul00, Mul01);
+		}
+		
+		__m128 Fac3;
+		{
+			__m128 Swp0a = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(3, 3, 3, 3));
+			__m128 Swp0b = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(0, 0, 0, 0));
+		
+			__m128 Swp00 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 Swp01 = _mm_shuffle_ps(Swp0a, Swp0a, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp02 = _mm_shuffle_ps(Swp0b, Swp0b, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp03 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(3, 3, 3, 3));
+		
+			__m128 Mul00 = _mm_mul_ps(Swp00, Swp01);
+			__m128 Mul01 = _mm_mul_ps(Swp02, Swp03);
+			Fac3 = _mm_sub_ps(Mul00, Mul01);
+		}
+		
+		__m128 Fac4;
+		{
+			__m128 Swp0a = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 Swp0b = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(0, 0, 0, 0));
+		
+			__m128 Swp00 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 Swp01 = _mm_shuffle_ps(Swp0a, Swp0a, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp02 = _mm_shuffle_ps(Swp0b, Swp0b, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp03 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(2, 2, 2, 2));
+		
+			__m128 Mul00 = _mm_mul_ps(Swp00, Swp01);
+			__m128 Mul01 = _mm_mul_ps(Swp02, Swp03);
+			Fac4 = _mm_sub_ps(Mul00, Mul01);
+		}
+		
+		__m128 Fac5;
+		{
+			__m128 Swp0a = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 Swp0b = _mm_shuffle_ps(in[3], in[2], _MM_SHUFFLE(0, 0, 0, 0));
+		
+			__m128 Swp00 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 Swp01 = _mm_shuffle_ps(Swp0a, Swp0a, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp02 = _mm_shuffle_ps(Swp0b, Swp0b, _MM_SHUFFLE(2, 0, 0, 0));
+			__m128 Swp03 = _mm_shuffle_ps(in[2], in[1], _MM_SHUFFLE(1, 1, 1, 1));
+		
+			__m128 Mul00 = _mm_mul_ps(Swp00, Swp01);
+			__m128 Mul01 = _mm_mul_ps(Swp02, Swp03);
+			Fac5 = _mm_sub_ps(Mul00, Mul01);
+		}
+		
+		__m128 SignA = _mm_set_ps(1.0f, -1.0f, 1.0f, -1.0f);
+		__m128 SignB = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);
+		
+		__m128 Temp0 = _mm_shuffle_ps(in[1], in[0], _MM_SHUFFLE(0, 0, 0, 0));
+		__m128 Vec0 = _mm_shuffle_ps(Temp0, Temp0, _MM_SHUFFLE(2, 2, 2, 0));
+		
+		__m128 Temp1 = _mm_shuffle_ps(in[1], in[0], _MM_SHUFFLE(1, 1, 1, 1));
+		__m128 Vec1 = _mm_shuffle_ps(Temp1, Temp1, _MM_SHUFFLE(2, 2, 2, 0));
+		
+		__m128 Temp2 = _mm_shuffle_ps(in[1], in[0], _MM_SHUFFLE(2, 2, 2, 2));
+		__m128 Vec2 = _mm_shuffle_ps(Temp2, Temp2, _MM_SHUFFLE(2, 2, 2, 0));
+		
+		__m128 Temp3 = _mm_shuffle_ps(in[1], in[0], _MM_SHUFFLE(3, 3, 3, 3));
+		__m128 Vec3 = _mm_shuffle_ps(Temp3, Temp3, _MM_SHUFFLE(2, 2, 2, 0));
+		
+		__m128 Mul00 = _mm_mul_ps(Vec1, Fac0);
+		__m128 Mul01 = _mm_mul_ps(Vec2, Fac1);
+		__m128 Mul02 = _mm_mul_ps(Vec3, Fac2);
+		__m128 Sub00 = _mm_sub_ps(Mul00, Mul01);
+		__m128 Add00 = _mm_add_ps(Sub00, Mul02);
+		__m128 Inv0 = _mm_mul_ps(SignB, Add00);
+		
+		__m128 Mul03 = _mm_mul_ps(Vec0, Fac0);
+		__m128 Mul04 = _mm_mul_ps(Vec2, Fac3);
+		__m128 Mul05 = _mm_mul_ps(Vec3, Fac4);
+		__m128 Sub01 = _mm_sub_ps(Mul03, Mul04);
+		__m128 Add01 = _mm_add_ps(Sub01, Mul05);
+		__m128 Inv1 = _mm_mul_ps(SignA, Add01);
+		
+		__m128 Mul06 = _mm_mul_ps(Vec0, Fac1);
+		__m128 Mul07 = _mm_mul_ps(Vec1, Fac3);
+		__m128 Mul08 = _mm_mul_ps(Vec3, Fac5);
+		__m128 Sub02 = _mm_sub_ps(Mul06, Mul07);
+		__m128 Add02 = _mm_add_ps(Sub02, Mul08);
+		__m128 Inv2 = _mm_mul_ps(SignB, Add02);
+		
+		__m128 Mul09 = _mm_mul_ps(Vec0, Fac2);
+		__m128 Mul10 = _mm_mul_ps(Vec1, Fac4);
+		__m128 Mul11 = _mm_mul_ps(Vec2, Fac5);
+		__m128 Sub03 = _mm_sub_ps(Mul09, Mul10);
+		__m128 Add03 = _mm_add_ps(Sub03, Mul11);
+		__m128 Inv3 = _mm_mul_ps(SignA, Add03);
+		
+		__m128 Row0 = _mm_shuffle_ps(Inv0, Inv1, _MM_SHUFFLE(0, 0, 0, 0));
+		__m128 Row1 = _mm_shuffle_ps(Inv2, Inv3, _MM_SHUFFLE(0, 0, 0, 0));
+		__m128 Row2 = _mm_shuffle_ps(Row0, Row1, _MM_SHUFFLE(2, 0, 2, 0));
+		
+		__m128 Det0 = Vector4::Dot(in[0], Row2);
+		__m128 Rcp0 = _mm_div_ps(_mm_set1_ps(1.0f), Det0);
+		Matrix4 out;
+		out[0] = _mm_mul_ps(Inv0, Rcp0);
+		out[1] = _mm_mul_ps(Inv1, Rcp0);
+		out[2] = _mm_mul_ps(Inv2, Rcp0);
+		out[3] = _mm_mul_ps(Inv3, Rcp0);
+		return out;
 	}
 
-	inline Matrix4 static VECTORCALL Multiply(const Matrix4 M1, const Matrix4& M2)
+	inline Matrix4 static VECTORCALL Multiply(const Matrix4 in1, const Matrix4 in2)
 	{
-		Matrix4 mResult;
-		__m128 vW = M1.r[0];
-		__m128 vX = _mm_permute_ps(vW, _MM_SHUFFLE(0, 0, 0, 0));
-		__m128 vY = _mm_permute_ps(vW, _MM_SHUFFLE(1, 1, 1, 1));
-		__m128 vZ = _mm_permute_ps(vW, _MM_SHUFFLE(2, 2, 2, 2));
+		Matrix4 out;
+		{
+			__m128 e0 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 e1 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 e2 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 e3 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(3, 3, 3, 3));
 
-		vW = _mm_permute_ps(vW, _MM_SHUFFLE(3, 3, 3, 3));
+			__m128 m0 = _mm_mul_ps(in1[0], e0);
+			__m128 m1 = _mm_mul_ps(in1[1], e1);
+			__m128 m2 = _mm_mul_ps(in1[2], e2);
+			__m128 m3 = _mm_mul_ps(in1[3], e3);
 
-		// Perform the operation on the first row
-		vX = _mm_mul_ps(vX, M2.r[0]);
-		vY = _mm_mul_ps(vY, M2.r[1]);
-		vZ = _mm_mul_ps(vZ, M2.r[2]);
-		vW = _mm_mul_ps(vW, M2.r[3]);
+			__m128 a0 = _mm_add_ps(m0, m1);
+			__m128 a1 = _mm_add_ps(m2, m3);
+			__m128 a2 = _mm_add_ps(a0, a1);
 
-		vX = _mm_add_ps(vX, vZ);
-		vY = _mm_add_ps(vY, vW);
-		vX = _mm_add_ps(vX, vY);
-		mResult.r[0] = vX;
+			out[0] = a2;
+		}
+		{
+			__m128 e0 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 e1 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 e2 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 e3 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(3, 3, 3, 3));
 
-		vW = M1.r[1];
-		vX = _mm_permute_ps(vW, _MM_SHUFFLE(0, 0, 0, 0));
-		vY = _mm_permute_ps(vW, _MM_SHUFFLE(1, 1, 1, 1));
-		vZ = _mm_permute_ps(vW, _MM_SHUFFLE(2, 2, 2, 2));
-		vW = _mm_permute_ps(vW, _MM_SHUFFLE(3, 3, 3, 3));
+			__m128 m0 = _mm_mul_ps(in1[0], e0);
+			__m128 m1 = _mm_mul_ps(in1[1], e1);
+			__m128 m2 = _mm_mul_ps(in1[2], e2);
+			__m128 m3 = _mm_mul_ps(in1[3], e3);
 
-		vX = _mm_mul_ps(vX, M2.r[0]);
-		vY = _mm_mul_ps(vY, M2.r[1]);
-		vZ = _mm_mul_ps(vZ, M2.r[2]);
-		vW = _mm_mul_ps(vW, M2.r[3]);
-		vX = _mm_add_ps(vX, vZ);
-		vY = _mm_add_ps(vY, vW);
-		vX = _mm_add_ps(vX, vY);
-		mResult.r[1] = vX;
+			__m128 a0 = _mm_add_ps(m0, m1);
+			__m128 a1 = _mm_add_ps(m2, m3);
+			__m128 a2 = _mm_add_ps(a0, a1);
 
-		vW = M1.r[2];
-		vX = _mm_permute_ps(vW, _MM_SHUFFLE(0, 0, 0, 0));
-		vY = _mm_permute_ps(vW, _MM_SHUFFLE(1, 1, 1, 1));
-		vZ = _mm_permute_ps(vW, _MM_SHUFFLE(2, 2, 2, 2));
-		vW = _mm_permute_ps(vW, _MM_SHUFFLE(3, 3, 3, 3));
+			out[1] = a2;
+		}
+		{
+			__m128 e0 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 e1 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 e2 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 e3 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(3, 3, 3, 3));
 
-		vX = _mm_mul_ps(vX, M2.r[0]);
-		vY = _mm_mul_ps(vY, M2.r[1]);
-		vZ = _mm_mul_ps(vZ, M2.r[2]);
-		vW = _mm_mul_ps(vW, M2.r[3]);
-		vX = _mm_add_ps(vX, vZ);
-		vY = _mm_add_ps(vY, vW);
-		vX = _mm_add_ps(vX, vY);
-		mResult.r[2] = vX;
+			__m128 m0 = _mm_mul_ps(in1[0], e0);
+			__m128 m1 = _mm_mul_ps(in1[1], e1);
+			__m128 m2 = _mm_mul_ps(in1[2], e2);
+			__m128 m3 = _mm_mul_ps(in1[3], e3);
 
-		vW = M1.r[3];
-		vX = _mm_permute_ps(vW, _MM_SHUFFLE(0, 0, 0, 0));
-		vY = _mm_permute_ps(vW, _MM_SHUFFLE(1, 1, 1, 1));
-		vZ = _mm_permute_ps(vW, _MM_SHUFFLE(2, 2, 2, 2));
-		vW = _mm_permute_ps(vW, _MM_SHUFFLE(3, 3, 3, 3));
+			__m128 a0 = _mm_add_ps(m0, m1);
+			__m128 a1 = _mm_add_ps(m2, m3);
+			__m128 a2 = _mm_add_ps(a0, a1);
 
-		vX = _mm_mul_ps(vX, M2.r[0]);
-		vY = _mm_mul_ps(vY, M2.r[1]);
-		vZ = _mm_mul_ps(vZ, M2.r[2]);
-		vW = _mm_mul_ps(vW, M2.r[3]);
-		vX = _mm_add_ps(vX, vZ);
-		vY = _mm_add_ps(vY, vW);
-		vX = _mm_add_ps(vX, vY);
-		mResult.r[3] = vX;
-		return mResult;
+			out[2] = a2;
+		}
+		{
+			__m128 e0 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(0, 0, 0, 0));
+			__m128 e1 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(1, 1, 1, 1));
+			__m128 e2 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(2, 2, 2, 2));
+			__m128 e3 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(3, 3, 3, 3));
+
+			__m128 m0 = _mm_mul_ps(in1[0], e0);
+			__m128 m1 = _mm_mul_ps(in1[1], e1);
+			__m128 m2 = _mm_mul_ps(in1[2], e2);
+			__m128 m3 = _mm_mul_ps(in1[3], e3);
+
+			__m128 a0 = _mm_add_ps(m0, m1);
+			__m128 a1 = _mm_add_ps(m2, m3);
+			__m128 a2 = _mm_add_ps(a0, a1);
+
+			out[3] = a2;
+		}
+		return out;
 	}
 
 	FINLINE static Vector3f VECTORCALL ExtractPosition(const Matrix4 matrix) noexcept
@@ -577,11 +595,10 @@ struct Matrix4
 		__m128 v1 = _mm_mul_ps(m.r[1], _mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 1, 1, 1)));
 		__m128 v2 = _mm_mul_ps(m.r[2], _mm_shuffle_ps(v, v, _MM_SHUFFLE(2, 2, 2, 2)));
 		__m128 v3 = _mm_mul_ps(m.r[3], _mm_shuffle_ps(v, v, _MM_SHUFFLE(3, 3, 3, 3)));
-
 		__m128 a0 = _mm_add_ps(v0, v1);
 		__m128 a1 = _mm_add_ps(v2, v3);
 		__m128 a2 = _mm_add_ps(a0, a1);
 		return a2;
 	}
 };
-   
+ 

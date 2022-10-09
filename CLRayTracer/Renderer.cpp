@@ -97,7 +97,7 @@ int Renderer::Initialize()
 		glUseProgram(shaderProgram);
 
 		int width, height, channels;
-		unsigned char* skyboxData = stbi_load("../Assets/cape_hill_2k.jpg", &width, &height, &channels, 3);
+		unsigned char* skyboxData = stbi_load("../Assets/cape_hill_4k.jpg", &width, &height, &channels, 3);
 		if (!skyboxData) { AXERROR("cannot load skybox image"); return 0; }
 		
 		glGenTextures(1, &skyboxTexture);
@@ -129,16 +129,14 @@ int Renderer::Initialize()
 	cl_uint num_of_platforms = 0;
 	cl_platform_id platform_id;
 	// retreives a list of platforms available
-	if (clGetPlatformIDs(1, &platform_id, &num_of_platforms) != CL_SUCCESS)
-	{
+	if (clGetPlatformIDs(1, &platform_id, &num_of_platforms) != CL_SUCCESS) {
 		AXERROR("Unable to get platform_id"); return 0;
 	}
 	
 	cl_uint num_of_devices = 0;
 	cl_device_id device_id;
 	// try to get a supported GPU device
-	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &num_of_devices) != CL_SUCCESS)
-	{
+	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &num_of_devices) != CL_SUCCESS) {
 		AXERROR("Unable to get device_id"); return 0;
 	}
 	
@@ -164,7 +162,7 @@ int Renderer::Initialize()
 	// compile the program
 	if (clBuildProgram(program, 0, NULL, NULL, NULL, NULL) != CL_SUCCESS)
 	{
-		AXERROR("Error building program\n");
+		AXERROR("Error building program");
 		size_t param_value_size;
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &param_value_size);
 		char* buildLog = new char[param_value_size];

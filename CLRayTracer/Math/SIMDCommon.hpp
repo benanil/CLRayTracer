@@ -98,7 +98,7 @@ FINLINE void VECTORCALL SSEStoreVector3(float* f, __m128 vec)
 	_mm_store_ss(f + 2, _mm_permute_ps(vec, _MM_SHUFFLE(2,2,2,2)));
 }
 
-FINLINE float VECTORCALL XMVectorGetX(__m128 V) {
+FINLINE float VECTORCALL SSEVectorGetX(__m128 V) {
 	return _mm_cvtss_f32(V);
 }
 

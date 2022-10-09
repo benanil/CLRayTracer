@@ -83,13 +83,13 @@ struct Vector3f
 
 	static Vector3f Cross(const Vector3f& a, const Vector3f& b) 
 	{
-		return Vector3f(a.y * b.z - a.z * b.y,
-		                a.z * b.x - a.x * b.z,
-		                a.x * b.y - a.y * b.x);
+		return Vector3f(a.y * b.z - b.y * a.z,
+			            a.z * b.x - b.z * a.x,
+			            a.x * b.y - b.x * a.y);
 	}
 
 	static Vector3f Normalize(const Vector3f& a)  {
-		return a / a.Length();
+		return a * rsqrt(Dot(a, a));
 	}
 
 	Vector3f operator-() { return Vector3f(-x, -y, -z); }

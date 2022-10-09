@@ -26,7 +26,7 @@ struct Camera
 	Vector2i viewportSize;
 	
 	Vector3f position, targetPosition;
-	float angle;
+	float angle = 0.0f;
 
 	Camera() {}
 
@@ -53,14 +53,13 @@ struct Camera
 
 	void RecalculateProjection()
 	{
-		float aspectRatio = (float)viewportSize.x / (float)viewportSize.y;
-		projection = Matrix4::PerspectiveFovLH(verticalFOV * DegToRad, aspectRatio, nearClip, farClip);
+		projection = Matrix4::PerspectiveFovRH(verticalFOV * DegToRad, viewportSize.x, viewportSize.y, nearClip, farClip);
 		inverseProjection = Matrix4::Inverse(projection);	
 	}
 
 	void RecalculateView()
 	{
-		view = Matrix4::LookAtLH(position, Vector3f(-sin(angle), 0.0f, -cos(angle)), Vector3f(0, 1.0f,0));
+		view = Matrix4::LookAtRH(position, Vector3f(-sin(angle), 0.0f, -cos(angle)), Vector3f::Up());
 		inverseView = Matrix4::Inverse(view);
 	}
 
@@ -71,7 +70,7 @@ struct Camera
 		Vector4 target = inverseProjection * Vector4(coord.x, coord.y, 1.0f, 1.0f);
 		target /= target.w;
 		target = inverseView * target.Normalized();
-		target.y = 0.0f - target.y;
+		target.y = target.y;
 		return Ray(position, Vector3f(target.x, target.y, target.z));
 	}
 };
