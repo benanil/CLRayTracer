@@ -5,8 +5,7 @@
 
 typedef struct { ulong state;  ulong inc; } RandState;
 
-RandState GenRandomState()
-{
+RandState GenRandomState() {
 	RandState state;
 	state.state = 0x853c49e6748fea9bULL;
 	state.inc   = 0xda3e39cb94b95bdbULL;
@@ -36,6 +35,7 @@ float NextFloat(RandState* state, float min, float max) {
 typedef struct _Ray {
 	float3 origin;
 	float3 direction;
+	float3 energy;
 } Ray;
 
 typedef struct _Matrix {
@@ -44,39 +44,71 @@ typedef struct _Matrix {
 
 typedef struct _TraceArgs{
 	float cameraPos[3];
-	float time;
+	int numSpheres;
 } TraceArgs;
 
 typedef struct _RayHit {
 	float3 position;
 	float  distance;
-	float3 normal;
+	int    index;
 } RayHit;
 
-typedef struct _Sphere {
-	float3 sphere;
+typedef struct __attribute__((packed)) _Sphere {
+	float position[3]; // w radius
 	float radius;
+	float roughness;
+	uint  color;
 } Sphere;
 
-RayHit CreateRayHit()
+typedef struct _HitRecord
 {
-    RayHit hit;
-    hit.position = (float3)(0.0f, 0.0f, 0.0f);
-    hit.distance = 9999.0f;
-    hit.normal = (float3)(0.0f, 0.0f, 0.0f);
+	float3 color, normal, point;
+} HitRecord;
+
+constant float Infinite = 99999.0f;
+constant float InfMinusOne = 99998.0f;
+
+HitRecord CreateHitRecord()
+{
+	HitRecord record;
+	record.color  = (float3)(0.90f, 0.90f, 0.90f); // plane color
+	record.normal = (float3)(0.0f, 1.0f, 0.0f);// w = roughness
+	return record;
+}
+
+RayHit CreateRayHit() {
+    RayHit hit; hit.distance = Infinite; hit.index = 0;
     return hit;
+}
+
+Ray CreateRay(float3 origin, float3 dir)
+{
+	Ray ray;
+	ray.origin = origin;
+	ray.direction = dir;
+	ray.energy = (float3)(1.0f, 1.0f, 1.0f);
+	return ray;
 }
 
 // ---- MATH ----
 
-float4 MatMul(Matrix4 m, float4 v)
-{
+float4 MatMul(Matrix4 m, float4 v) {
 	return m.x * v.xxxx + m.y * v.yyyy + m.z * v.zzzz + m.w * v.wwww;
 }
 
-void IntersectSphere(float3 center, float radius, Ray ray, RayHit* besthit) 
+float3 reflect(float3 v, float3 n) {
+	return v - n * dot(n, v) * 2.0f;
+}
+
+float3 UnpackRGB8(unsigned u)  {
+	constant float normalizer = 1.0f / 255.0f;
+	// I might use union or other technique
+	return (float3)((float)((u >> 0 ) & 255) * normalizer, (float)((u >> 8 ) & 255) * normalizer, (float)((u >> 16) & 255) * normalizer);
+}
+
+bool IntersectSphere(float3 position, float radius, Ray ray, RayHit* besthit, int i) 
 {
-	float3 origin = ray.origin - center;
+	float3 origin = ray.origin - position;
 	
 	float a = dot(ray.direction, ray.direction);
 	float b = 2.0f * dot(origin, ray.direction);
@@ -84,42 +116,32 @@ void IntersectSphere(float3 center, float radius, Ray ray, RayHit* besthit)
 
 	float discriminant = b * b - 4.0f * a * c;
 	
-	if (discriminant < 0.0f) return;
+	if (discriminant < 0.0f) return false;
 
 	float closestT = (-b - sqrt(discriminant)) / (2.0f * a);
 	 
 	if (closestT > 0.0f && closestT < besthit->distance)
 	{
 		besthit->distance = closestT;
-		besthit->position = origin + ray.direction * closestT;
-		besthit->normal = normalize(besthit->position);
+		besthit->index = i;
+		return true;
 	}
+	return false;
 }
 
 bool IntersectPlane(Ray ray, RayHit* besthit)
 {
 	float t = -ray.origin.y / ray.direction.y;
-	if (t > 0.0f && t < besthit->distance)
-	{
-		besthit->distance = t;
-		besthit->position = ray.origin + (ray.direction * t);
-		besthit->normal   = (float3)(0.0f, 1.0f, 0.0f);
+    if (t > 0 && t < besthit->distance) {
+        besthit->distance = t;
+    	return true;
 	}
-}
-
-float4 Shade(RayHit hit)
-{
-	const float3 sunDir = (float3)(sin(1.2f), cos(1.2f), 0.0f);
-	constant float4 color  = (float4)(1.0f, 0.7f, 0.4f, 1.0f); 
-	return color * max(dot(hit.normal, sunDir), 0.2f);
+	return false;
 }
 
 // ---- Kernels ----
-
-kernel void RayGen
-(
-	int width,
-	int height,
+kernel void RayGen (
+	int width, int height,
 	global float* rays, const Matrix4 inverseView, const Matrix4 inverseProjection
 )
 {
@@ -135,32 +157,82 @@ kernel void RayGen
 	vstore3(rayDir, i + j * width, rays);
 }
 
-kernel void Trace
-(
+kernel void Trace (
 	write_only image2d_t inout,
 	read_only image2d_t skybox, 
-	global const float* rays, TraceArgs trace_args
+	global const float* rays, 
+	global const Sphere* spheres,
+	TraceArgs trace_args,
+	float time
 ) 
 {
 	const int i = get_global_id(0), j = get_global_id(1);
-	constant float gamma = 1.2f;
-	constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT  | CLK_FILTER_NEAREST;
+	constant float oneDivGamma = 1.0f / 1.2f;
+	constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
 
-	Ray ray;
-	ray.origin = vload3(0, trace_args.cameraPos);
-	ray.direction = vload3(i + j * get_image_width(inout), rays);
+	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(i + j * get_image_width(inout), rays));
 
-	RayHit besthit = CreateRayHit();
-	
-	IntersectSphere((float3)(0.0f, 0.0f, 0.0f), 1.0f, ray, &besthit);
-	float4 pixel_color = pow(Shade(besthit), 1.0f / gamma);
+	float3 lightDir = (float3)(-0.5f, 0.5f, 0.0f);//(float3)(sin(0.45f), cos(0.45f), 0.0f); // sun dir
+	float3 result = (float3)(0.0f, 0.0f, 0.0f);
+	float atmosphericLight = 0.2f;
 
-	if (besthit.distance >= 9998.0f)
+	for (int j = 0; j < 3; ++j)// num bounces
 	{
-	    float theta = acos(ray.direction.y) / M_PI_F;
-        float phi = atan2(ray.direction.x, -ray.direction.z) / -M_PI_F ;
-		pixel_color = read_imagef(skybox, sampler, (float2)(phi, theta));;
-	}
+		RayHit besthit = CreateRayHit();
+		HitRecord record = CreateHitRecord();
+		float roughness = 0.80f; // plane roughness
+		// find intersectedsphere
+		for (int i = 0; i < 10; ++i)  {
+			IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
+		}
+	
+		if (IntersectPlane(ray, &besthit))
+		{
+			record.point = ray.origin + ray.direction * besthit.distance;
+		}
+		else
+		{
+			Sphere currentSphere = spheres[besthit.index];
+			record.point = ray.origin + ray.direction * besthit.distance;
+			record.normal.xyz = normalize(record.point - vload3(0, currentSphere.position));
+			record.color.xyz = UnpackRGB8(currentSphere.color);
+			roughness = currentSphere.roughness;
+		}
 
-	write_imagef(inout, (int2)(i, j), pixel_color);
+		if (besthit.distance > InfMinusOne) {
+			float theta = acos(ray.direction.y) / M_PI_F;
+			float phi   = atan2(ray.direction.x, -ray.direction.z) / -M_PI_F ;
+			float3 skybox_sample = read_imagef(skybox, sampler, (float2)(phi, theta)).xyz * 1.20f;
+			result += skybox_sample * ray.energy;
+			break;
+		}
+
+		ray.origin = record.point;
+		ray.origin += record.normal * 0.001f;
+		ray.direction = reflect(ray.direction, record.normal); // wo = ray.direction now = outgoing ray direction
+	
+		// check Shadow
+		Ray shadowRay = CreateRay(ray.origin, -lightDir);
+		besthit = CreateRayHit();
+		float shadow = 1.0f; 
+
+		for (int i = 0; i < 10; ++i) 
+		IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
+
+		if (besthit.distance < InfMinusOne || IntersectPlane(ray, &besthit)) shadow = atmosphericLight; 
+
+		// Shade
+		float ndl = max(dot(record.normal, lightDir), atmosphericLight);
+		atmosphericLight *= 0.4f;
+		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); // color.w = roughness
+
+		result += ray.energy * (record.color * ndl);
+		ray.energy *= specular;
+		
+		lightDir = ray.direction;
+		
+		if ((ray.energy.x + ray.energy.y + ray.energy.z) < 0.015f) break;
+	}
+	
+	write_imagef(inout, (int2)(i, j), (float4)(pow(result, oneDivGamma), 0.1f));
 }

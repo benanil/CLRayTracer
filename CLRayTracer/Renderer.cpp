@@ -10,13 +10,15 @@
 #include "Window.hpp"
 #include "Logger.hpp"
 #include "Math/Camera.hpp"
+#include "Math/Random.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_JPEG
 #include <stb_image.h>
 
 // todo: 
-//       window resize callback
+//      specular, reflections
+//      plane, shadow, optimize
 
 namespace Renderer
 {
@@ -49,7 +51,9 @@ void main()\
 	cl_command_queue command_queue;
 	cl_program program;
 
-	cl_mem clglTexture, rayMem, clglSkybox;
+	cl_mem clglTexture, rayMem, clglSkybox, sphereMem;
+	constexpr int numSpheres = 25;
+	Sphere spheres[numSpheres];
 
 	GLuint VAO;
 	GLuint shaderProgram;
@@ -117,6 +121,7 @@ int Renderer::Initialize()
 		// create empty vao unfortunately this step is necessary for ogl 3.2
 		glGenVertexArrays(1, &VAO);
 		glBindVertexArray(VAO);
+		free(skyboxData);
 	}
 	
 	cl_int clerr;
@@ -170,8 +175,7 @@ int Renderer::Initialize()
 	}
 	
 	// specify which kernel from the program to execute
-	int rayCount = Window::GetWidth() * Window::GetHeight();
-	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * rayCount, nullptr, &clerr); assert(clerr == 0);
+	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
 
 	traceKernel  = clCreateKernel(program, "Trace", &clerr); assert(clerr == 0);
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
@@ -184,26 +188,42 @@ int Renderer::Initialize()
 		return 0;
 	}
 
+	Random::PCG pcg{};
+
+	for (int i = 0; i < 5; i++)
+	{
+		for (int j = 0; j < 5; j++)
+		{
+			spheres[i + j * 5].position[0] = i * 2.8f;
+			spheres[i + j * 5].position[1] = 1.0f;
+			spheres[i + j * 5].position[2] = j * 2.8f;
+			spheres[i + j * 5].radius      = 1.0f;
+			spheres[i + j * 5].roughness   = i * 0.1f;	
+			spheres[i + j * 5].color  =  pcg.NextBound(255u);
+			spheres[i + j * 5].color |= (pcg.NextBound(255u) << 8);
+			spheres[i + j * 5].color |= (pcg.NextBound(255u) << 16);	
+		}
+	}
+
+	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * 10, spheres, &clerr); assert(clerr == 0);
+
 	return 1;
 }
 
 void Renderer::OnKeyPressed(int keyCode, int action) {}
 
-static cl_event event;
-
 void Renderer::OnWindowResize(int width, int height)
 {
-	clFinish(command_queue); 
-	cl_int clerr;
-	if (clReleaseMemObject(clglTexture) != CL_SUCCESS) { AXERROR("couldn't resize!"); exit(0); }
-	if (clReleaseMemObject(rayMem) != CL_SUCCESS)      { AXERROR("couldn't resize!"); exit(0); }
+	clFinish(command_queue); cl_int clerr;
+	clReleaseMemObject(clglTexture);
+	clReleaseMemObject(rayMem);
 	glDeleteTextures(1, &screenTexture);
-	rayMem = clglTexture = nullptr;
-	screenTexture = 0u;
+	rayMem = clglTexture = nullptr; screenTexture = 0u;
 	CreateGLTexture(screenTexture, width, height);
 	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr);  assert(clerr == 0);
 	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * width * height, nullptr, &clerr); assert(clerr == 0);
 	glViewport(0, 0, width, height);
+	camera.RecalculateProjection(width, height);
 }
 
 void Renderer::Render()
@@ -212,18 +232,19 @@ void Renderer::Render()
 
 	Vector2i windowSize = Window::GetWindowScale();
 	size_t globalWorkSize[2] = { windowSize.x, windowSize.y };
+	float time = Window::GetTime();
 
 	camera.Update();
 
 	struct TraceArgs {
 		Vector3f cameraPosition;
-		float time;
+		int numSpheres;
 	} trace_args;
 
 	trace_args.cameraPosition = camera.position;
-	trace_args.time = Window::GetTime();
+	trace_args.numSpheres = numSpheres;
 
-	cl_int clerr;
+	cl_int clerr; cl_event event;
 
 	// prepare ray generation kernel
 	clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &windowSize.x);                 assert(clerr == 0);
@@ -237,10 +258,12 @@ void Renderer::Render()
 	cl_mem textures[2] = { clglTexture, clglSkybox };
 	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
 	
-	clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem)   , &clglTexture);    assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem)   , &clglSkybox);  assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem)   , &rayMem);   	 	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 3, sizeof(TraceArgs), &trace_args);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglTexture);    assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), &clglSkybox);  assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &rayMem);   	 	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 4, sizeof(TraceArgs), &trace_args);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 5, sizeof(float), &time);   	assert(clerr == 0);
 	// execute rendering
 	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0); assert(clerr == 0);
 	clerr = clEnqueueReleaseGLObjects(command_queue, 2, textures, 0, 0, 0); assert(clerr == 0);
@@ -248,16 +271,19 @@ void Renderer::Render()
 	clFinish(command_queue);
 
 	glDrawArrays(GL_TRIANGLES, 0, 3);
-	Window::ChangeName((Window::GetTime() - trace_args.time) * 1000.0);
+	Window::ChangeName((Window::GetTime() - time) * 1000.0);
 }
 
 void Renderer::Terminate()
 {
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteProgram(shaderProgram);
+	glDeleteTextures(1, &skyboxTexture); glDeleteTextures(1, &screenTexture);
 
 	// cleanup - release OpenCL resources
 	clReleaseMemObject(clglTexture);
+	clReleaseMemObject(rayMem);
+	clReleaseMemObject(sphereMem);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(command_queue);
 	clReleaseKernel(traceKernel);

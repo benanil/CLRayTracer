@@ -63,6 +63,10 @@ typedef unsigned short ushort;
 typedef unsigned       uint  ;
 typedef unsigned long  ulong ;
 
+typedef unsigned       uint32;
+typedef unsigned short uint16;
+typedef unsigned long long uint64;
+
 // maybe we should move this to Algorithms.hpp
 template<typename T, typename size_type = ulong>
 inline size_type Distance(const T* begin, const T* end)

@@ -101,10 +101,11 @@ int Window::Create()
 	glfwSetKeyCallback(window, Window::KeyCallback);
 	glfwSetWindowSizeCallback(window, Window::WindowCallback);
 
+	glfwSwapInterval(0);
+
 	const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	monitorScale.x = vidMode->width;
 	monitorScale.y = vidMode->height;
-	// todo add callbacks
 
 	// Define the viewport dimensions
 	glViewport(0, 0, Width, Height);

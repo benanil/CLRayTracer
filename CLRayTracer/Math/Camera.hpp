@@ -39,7 +39,7 @@ struct Camera
 	: viewportSize(xviewPortSize), position(0.0f,0.0f, 5.0f), targetPosition(0.0f,0.0f,5.0f), Front(0.0f,0.0f,1.0f)
 	{
 		monitorSize = Window::GetMonitorScale();
-		RecalculateProjection();
+		RecalculateProjection(xviewPortSize.x, xviewPortSize.y);
 		RecalculateView();
 	}
 	
@@ -66,7 +66,7 @@ struct Camera
 		const Vector2f mousePos = ToVector2f(Window::GetMouseScreenPos());
 		Vector2f diff = mousePos - mouseOld;
 		
-		if (wasPressing && diff.x + diff.y < 40.0f)
+		if (wasPressing && diff.x + diff.y < 130.0f)
 		{
 			pitch -= diff.y * dt * senstivity;
 			yaw   += diff.x * dt * senstivity;
@@ -95,9 +95,9 @@ struct Camera
 		RecalculateView();
 	}
 
-	void RecalculateProjection()
+	void RecalculateProjection(int width, int height)
 	{
-		projection = Matrix4::PerspectiveFovRH(verticalFOV * DegToRad, viewportSize.x, viewportSize.y, nearClip, farClip);
+		projection = Matrix4::PerspectiveFovRH(verticalFOV * DegToRad, width, height, nearClip, farClip);
 		inverseProjection = Matrix4::Inverse(projection);	
 	}
 
