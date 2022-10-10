@@ -30,7 +30,7 @@ struct Camera
 	
 	Vector3f Front, Right, Up;
 	
-	float pitch = 0.0f, yaw = 0.0f, senstivity = 60.0f;
+	float pitch = 0.0f, yaw = 0.0f, senstivity = 20.0f;
 	float angle;
 
 	Camera() {}
@@ -61,7 +61,7 @@ struct Camera
 		if (!pressing) { wasPressing = false; return; }
 
 		float dt = (float)Window::DeltaTime();
-		float speed = dt * (1.0f + Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f) * 2;
+		float speed = dt * (1.0f + Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
 
 		const Vector2f mousePos = ToVector2f(Window::GetMouseScreenPos());
 		Vector2f diff = mousePos - mouseOld;

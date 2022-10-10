@@ -3,7 +3,7 @@
 
 // ---- RANDOM ----
 
-typedef struct { ulong state;  ulong inc; } RandState;
+typedef struct _RandState { ulong state;  ulong inc; } RandState;
 
 RandState GenRandomState() {
 	RandState state;
@@ -42,6 +42,10 @@ typedef struct _Matrix {
 	float4 x, y, z, w;
 } Matrix4;
 
+typedef struct _float3x3 {
+	float3 x, y, z;
+} float3x3;
+
 typedef struct _TraceArgs{
 	float cameraPos[3];
 	int numSpheres;
@@ -67,6 +71,8 @@ typedef struct _HitRecord
 
 constant float Infinite = 99999.0f;
 constant float InfMinusOne = 99998.0f;
+
+// ---- Constructors ----
 
 HitRecord CreateHitRecord()
 {
@@ -94,6 +100,10 @@ Ray CreateRay(float3 origin, float3 dir)
 
 float4 MatMul(Matrix4 m, float4 v) {
 	return m.x * v.xxxx + m.y * v.yyyy + m.z * v.zzzz + m.w * v.wwww;
+}
+
+float3 Mat3Mul(float3x3 m, float3 v) {
+	return m.x * v.xxx + m.y * v.yyy + m.z * v.zzz;
 }
 
 float3 reflect(float3 v, float3 n) {
@@ -139,6 +149,29 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
 	return false;
 }
 
+float3x3 GetTangentSpace(float3 normal)
+{
+    // Choose a helper vector for the cross product
+    float3 helper = (float3)(1.0f, 0.0f, 0.0f);
+    if (fabs(normal.x) > 0.99f)
+        helper = (float3)(0.0f, 0.0f, 1.0f);
+    // Generate vectors
+    float3 tangent  = normalize(cross(normal, helper));
+    float3 binormal = normalize(cross(normal, tangent));
+	float3x3 mat;
+	mat.x = tangent; mat.y = binormal; mat.z = normal;
+	return mat;
+}
+
+float3 HemisphereSample(RandState* random, float3 normal)
+{
+	float cosTheta = NextFloat01(random); 
+	float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+	float phi = 2.0f * M_PI_F * NextFloat01(random);
+	float3 tangentSpaceDir = (float3)(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+	return Mat3Mul(GetTangentSpace(normal), tangentSpaceDir);
+}
+
 // ---- Kernels ----
 kernel void RayGen (
 	int width, int height,
@@ -172,9 +205,11 @@ kernel void Trace (
 
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(i + j * get_image_width(inout), rays));
 
-	float3 lightDir = (float3)(-0.5f, 0.5f, 0.0f);//(float3)(sin(0.45f), cos(0.45f), 0.0f); // sun dir
+	float3 lightDir = (float3)(0.5f, -0.5f, 0.0f);//(float3)(sin(0.45f), cos(0.45f), 0.0f); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float atmosphericLight = 0.2f;
+
+	RandState randState = GenRandomState();
 
 	for (int j = 0; j < 3; ++j)// num bounces
 	{
@@ -182,7 +217,7 @@ kernel void Trace (
 		HitRecord record = CreateHitRecord();
 		float roughness = 0.80f; // plane roughness
 		// find intersectedsphere
-		for (int i = 0; i < 10; ++i)  {
+		for (int i = 0; i < trace_args.numSpheres; ++i)  {
 			IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
 		}
 	
@@ -216,13 +251,13 @@ kernel void Trace (
 		besthit = CreateRayHit();
 		float shadow = 1.0f; 
 
-		for (int i = 0; i < 10; ++i) 
+		for (int i = 0; i < trace_args.numSpheres; ++i) 
 		IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
 
 		if (besthit.distance < InfMinusOne || IntersectPlane(ray, &besthit)) shadow = atmosphericLight; 
 
 		// Shade
-		float ndl = max(dot(record.normal, lightDir), atmosphericLight);
+		float ndl = max(dot(record.normal, -lightDir), atmosphericLight);
 		atmosphericLight *= 0.4f;
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); // color.w = roughness
 

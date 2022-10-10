@@ -19,6 +19,7 @@
 // todo: 
 //      specular, reflections
 //      plane, shadow, optimize
+//      dont render when window is not focused
 
 namespace Renderer
 {
@@ -167,8 +168,8 @@ int Renderer::Initialize()
 		AXERROR("Error building program");
 		size_t param_value_size;
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &param_value_size);
-		char* buildLog = new char[param_value_size];
-		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, param_value_size, buildLog, NULL);
+		char* buildLog = new char[param_value_size + 2]; buildLog[0] = '\n';
+		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, param_value_size, buildLog + 1, NULL);
 		AXWARNING(buildLog); 
 		delete[] buildLog, kernelCode;
 		return 0;
@@ -205,7 +206,7 @@ int Renderer::Initialize()
 		}
 	}
 
-	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * 10, spheres, &clerr); assert(clerr == 0);
+	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
 
 	return 1;
 }

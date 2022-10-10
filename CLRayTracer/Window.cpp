@@ -14,7 +14,7 @@ namespace Window
 
 	double dt;
 	
-	void EndFrame() { glfwSwapBuffers(window); }
+	void EndFrame() { glfwSwapInterval(1); glfwSwapBuffers(window); }
 
 	Vector2i GetMonitorScale() { return monitorScale; }
 	Vector2i GetWindowScale()  { return Vector2i(Width, Height); }
@@ -100,8 +100,6 @@ int Window::Create()
 	// Set the required callback functions
 	glfwSetKeyCallback(window, Window::KeyCallback);
 	glfwSetWindowSizeCallback(window, Window::WindowCallback);
-
-	glfwSwapInterval(0);
 
 	const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	monitorScale.x = vidMode->width;
