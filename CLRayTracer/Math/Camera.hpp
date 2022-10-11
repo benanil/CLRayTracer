@@ -31,7 +31,6 @@ struct Camera
 	Vector3f Front, Right, Up;
 	
 	float pitch = 0.0f, yaw = 0.0f, senstivity = 20.0f;
-	float angle;
 
 	Camera() {}
 

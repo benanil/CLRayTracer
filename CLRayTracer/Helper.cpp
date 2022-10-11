@@ -35,3 +35,29 @@ char* Helper::ReadAllText(const char* path)
 	f.close();
 	return code;
 }
+
+char* Helper::ReadCombineKernels()
+{
+	if (!std::filesystem::exists("kernels/kernel_main.cl") || !std::filesystem::exists("kernels/MathAndSTL.cl") ) {
+		AXERROR("one or more kernel file is not exist!\n %c");
+		return nullptr;
+	}
+
+	std::ifstream f ("kernels/kernel_main.cl", std::ios::in | std::ios::binary | std::ios::failbit);
+	std::ifstream fm("kernels/MathAndSTL.cl"       , std::ios::in | std::ios::binary | std::ios::failbit);
+	
+	SkipBOM(f); SkipBOM(fm);
+	const uintmax_t msz = std::filesystem::file_size("kernels/MathAndSTL.cl");
+	const uintmax_t sz  = std::filesystem::file_size("kernels/kernel_main.cl");
+
+	char* code = new char[sz + msz +1];
+	fm.read(code, msz);
+	f.read(code + msz, sz);
+
+	code[sz + msz] = '\0';
+
+	printf(code); printf("\n");
+
+	f.close(); fm.close();
+	return code;
+}

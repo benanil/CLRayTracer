@@ -157,11 +157,12 @@ int Renderer::Initialize()
 	// create command queue using the context and device
 	command_queue = clCreateCommandQueueWithProperties(context, device_id, nullptr, &clerr);
 	
-	char* kernelCode = Helper::ReadAllText("kernels/kernel_main.cl");
+	char* kernelCode = Helper::ReadCombineKernels();
 	if (!kernelCode) { return 0; }
 	
 	program = clCreateProgramWithSource(context, 1, (const char**)&kernelCode, NULL, &clerr); assert(clerr == 0);
 	
+	delete[] kernelCode;
 	// compile the program
 	if (clBuildProgram(program, 0, NULL, NULL, NULL, NULL) != CL_SUCCESS)
 	{
@@ -171,7 +172,7 @@ int Renderer::Initialize()
 		char* buildLog = new char[param_value_size + 2]; buildLog[0] = '\n';
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, param_value_size, buildLog + 1, NULL);
 		AXWARNING(buildLog); 
-		delete[] buildLog, kernelCode;
+		delete[] buildLog;
 		return 0;
 	}
 	
@@ -200,9 +201,7 @@ int Renderer::Initialize()
 			spheres[i + j * 5].position[2] = j * 2.8f;
 			spheres[i + j * 5].radius      = 1.0f;
 			spheres[i + j * 5].roughness   = i * 0.1f;	
-			spheres[i + j * 5].color  =  pcg.NextBound(255u);
-			spheres[i + j * 5].color |= (pcg.NextBound(255u) << 8);
-			spheres[i + j * 5].color |= (pcg.NextBound(255u) << 16);	
+			spheres[i + j * 5].color = pcg.NextBound(255u) | (pcg.NextBound(255u) << 8) | (pcg.NextBound(255u) << 16);	
 		}
 	}
 
