@@ -188,10 +188,10 @@ int Renderer::Initialize()
 
 	// create random sphere positions&colors
 	CreatePlanet(20.0f, 0.00f, 0.00f, 0x00ffffff, sunTexture    );
-	CreatePlanet(1.00f, 1.50f, 50.0f * 4.0f, 0x00ffffff, earthTexture  );
-	CreatePlanet(0.33f, 1.55f, 53.0f * 4.0f, 0x00ffffff, moonTexture   );
-	CreatePlanet(0.90f, 2.55f, 75.0f * 4.0f, 0x00ffffff, marsTexture   );
-	CreatePlanet(3.00f, 4.50f, 90.0f * 4.0f, 0x00ffffff, jupiterTexture);
+	CreatePlanet(1.00f, 1.50f, 50.0f * 2.0f, 0x00ffffff, earthTexture  );
+	CreatePlanet(0.33f, 1.55f, 53.0f * 2.0f, 0x00ffffff, moonTexture   );
+	CreatePlanet(0.90f, 2.55f, 75.0f * 2.0f, 0x00ffffff, marsTexture   );
+	CreatePlanet(3.00f, 4.50f, 90.0f * 2.0f, 0x00ffffff, jupiterTexture);
 	
 	// specify which kernel from the program to execute
 	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
