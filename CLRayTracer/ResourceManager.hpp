@@ -5,7 +5,7 @@
 // max number of textures note: assumed all textures are 2k, 
 // max texture size is 4k for above you need to increment this value
 #ifndef CL_MAX_TEXTURES
-#	define CL_MAX_TEXTURES 4
+#	define CL_MAX_TEXTURES 20
 #endif
 
 struct Texture

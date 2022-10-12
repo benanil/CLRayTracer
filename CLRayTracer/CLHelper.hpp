@@ -13,4 +13,5 @@ typedef struct Sphere_t
 	float radius;
 	float roughness;
 	unsigned color;
+	Sphere_t() {}
 } Sphere;

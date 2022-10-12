@@ -16,9 +16,8 @@
 // todo: 
 //      specular, reflections
 //      plane, shadow, optimize
-//      dont render when window is not focused
 
-namespace Renderer
+namespace 
 {
 	const GLchar* vertexShaderSource = "#version 330 core\n\
 noperspective out vec2 texCoord;\
@@ -46,8 +45,7 @@ void main()\
 	cl_program program;
 
 	cl_mem clglTexture, rayMem, sphereMem;
-	TextureHandle earthHandle, meHandle, smileHandle;
-	constexpr int numSpheres = 25;
+	constexpr int numSpheres = 5;
 	Sphere spheres[numSpheres];
 
 	GLuint VAO;
@@ -68,6 +66,19 @@ void CreateGLTexture(GLuint& texture, int width, int height, void* data = nullpt
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+}
+
+void CreatePlanet(float radius, float angle, float distance, unsigned color, char texture)
+{
+	static int planetIndex = 0;
+	Sphere& sphere = spheres[planetIndex];
+	sphere.radius = radius;
+	sphere.position[0] = sinf(angle) * distance; 
+	sphere.position[1] = 0.0f;
+	sphere.position[2] = cosf(angle) * distance;
+	sphere.color = color | (texture << 24);
+	sphere.roughness = 1.0f-((float)planetIndex / 5.8f);
+	planetIndex++;
 }
 
 int Renderer::Initialize()
@@ -164,20 +175,23 @@ int Renderer::Initialize()
 		return 0;
 	}
 
+	ResourceManager::Initialize();
+
+	char skyTexture     = ResourceManager::ImportTexture("../Assets/8k_stars_milky_way.jpg");
+	char sunTexture     = ResourceManager::ImportTexture("../Assets/2k_sun.jpg");
+	char earthTexture   = ResourceManager::ImportTexture("../Assets/earthmap.jpg");
+	char moonTexture    = ResourceManager::ImportTexture("../Assets/2k_moon.jpg");
+	char marsTexture    = ResourceManager::ImportTexture("../Assets/2k_mars.jpg");
+	char jupiterTexture = ResourceManager::ImportTexture("../Assets/2k_jupiter.jpg");
+
+	ResourceManager::PushTexturesToGPU(context);
+
 	// create random sphere positions&colors
-	Random::PCG pcg{};
-	for (int i = 0; i < 5; i++)
-	{
-		for (int j = 0; j < 5; j++)
-		{
-			spheres[i + j * 5].position[0] = i * 2.8f;
-			spheres[i + j * 5].position[1] = 1.0f;
-			spheres[i + j * 5].position[2] = j * 2.8f;
-			spheres[i + j * 5].radius      = 1.0f;
-			spheres[i + j * 5].roughness   = i * 0.1f;	
-			spheres[i + j * 5].color = pcg.NextBound(255u) | (pcg.NextBound(255u) << 8) | (pcg.NextBound(255u) << 16);	
-		}
-	}
+	CreatePlanet(20.0f, 0.00f, 0.00f, 0x00ffffff, sunTexture    );
+	CreatePlanet(1.00f, 1.50f, 50.0f * 4.0f, 0x00ffffff, earthTexture  );
+	CreatePlanet(0.33f, 1.55f, 53.0f * 4.0f, 0x00ffffff, moonTexture   );
+	CreatePlanet(0.90f, 2.55f, 75.0f * 4.0f, 0x00ffffff, marsTexture   );
+	CreatePlanet(3.00f, 4.50f, 90.0f * 4.0f, 0x00ffffff, jupiterTexture);
 	
 	// specify which kernel from the program to execute
 	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
@@ -186,13 +200,6 @@ int Renderer::Initialize()
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
 
 	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
-
-	ResourceManager::Initialize();
-	ResourceManager::ImportTexture("../Assets/cape_hill_4k.jpg");
-	earthHandle = ResourceManager::ImportTexture("../Assets/earthmap.jpg");
-	earthHandle = ResourceManager::ImportTexture("../Assets/me.jpg");
-	//earthHandle = ResourceManager::ImportTexture("../Assets/smile.jpg");
-	ResourceManager::PushTexturesToGPU(context);
 
 	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
 
@@ -203,6 +210,7 @@ void Renderer::OnKeyPressed(int keyCode, int action) {}
 
 void Renderer::OnWindowResize(int width, int height)
 {
+	if (width < 16 || height < 16) return;
 	clFinish(command_queue); cl_int clerr;
 	clReleaseMemObject(clglTexture);
 	clReleaseMemObject(rayMem);
@@ -217,7 +225,9 @@ void Renderer::OnWindowResize(int width, int height)
 
 void Renderer::Render()
 {
-	glClear(GL_COLOR_BUFFER_BIT);
+	if (!Window::IsFocused()) return;
+
+	// glClear(GL_COLOR_BUFFER_BIT);
 
 	Vector2i windowSize = Window::GetWindowScale();
 	size_t globalWorkSize[2] = { windowSize.x, windowSize.y };

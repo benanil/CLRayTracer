@@ -16,10 +16,10 @@ typedef struct _RayHit {
 } RayHit;
 
 typedef struct __attribute__((packed)) _Sphere {
-	float position[3]; // w radius
+	float position[3]; 
 	float radius;
 	float roughness;
-	uint  color;
+	uint  color; // w texture index
 } Sphere;
 
 typedef struct _HitRecord
@@ -67,9 +67,13 @@ bool IntersectSphere(float3 position, float radius, Ray ray, RayHit* besthit, in
 
 bool IntersectPlane(Ray ray, RayHit* besthit)
 {
+return false;
 	float t = -ray.origin.y / ray.direction.y;
-    if (t > 0 && t < besthit->distance) {
-        besthit->distance = t;
+    if (t > 0 && t < besthit->distance) 
+	{
+		float3 point = ray.origin + (ray.direction * t);
+    	if (fabs(point.x) < 15.0f && fabs(point.z) < 15.0f)
+			besthit->distance = t;
     	return true;
 	}
 	return false;
@@ -83,13 +87,10 @@ kernel void RayGen (
 )
 {
 	const int i = get_global_id(0), j = get_global_id(1);
-
 	float2 coord = (float2)((float)i / (float)width, (float)j / (float)height);
 	coord = coord * 2.0f - 1.0f;
 	float4 target = MatMul(inverseProjection, (float4)(coord, 1.0f, 1.0f));
 	target /= target.w;
-	target.w = 0;
-	target.xyz = target.xyz;
 	float3 rayDir = normalize(MatMul(inverseView, target).xyz);
 	vstore3(rayDir, i + j * width, rays);
 }
@@ -108,22 +109,24 @@ kernel void Trace (
 	
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(i + j * get_image_width(screen), rays));
 	
-	float3 lightDir = (float3)(0.5f, -0.5f, 0.0f);//(float3)(sin(0.45f), cos(0.45f), 0.0f); // sun dir
+	// float3 lightDir = (float3)(0.5f, -0.5f, 0.0f); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float atmosphericLight = 0.2f;
 	
 	RandState randState = GenRandomState();
 	
-	for (int j = 0; j < 3; ++j)// num bounces
+	//for (int j = 0; j < 1; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
 		HitRecord record = CreateHitRecord();
-		float roughness = 0.80f; // plane roughness
+		float roughness = 0.00f; // plane roughness
 		// find intersectedsphere
 		for (int i = 0; i < trace_args.numSpheres; ++i)  {
 			IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
 		}
-	
+		
+		float sun = 0.0f;
+
 		if (IntersectPlane(ray, &besthit))
 		{
 			record.point = ray.origin + ray.direction * besthit.distance;
@@ -133,19 +136,28 @@ kernel void Trace (
 			Sphere currentSphere = spheres[besthit.index];
 			float3 center = vload3(0, currentSphere.position);
 			record.point = ray.origin + ray.direction * besthit.distance;
-			record.normal.xyz = fast_normalize(record.point - center);
-			// int rand = Next(&randState) % 3 + 3;
-			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[3]);
-			record.color.xyz  = UNPACK_RGB8(pixel); //UnpackRGB8u(currentSphere.color);// ;
+			record.normal.xyz = normalize(record.point - center);
+			float3 color = UnpackRGB8u(currentSphere.color);
+			uchar textureIndex = currentSphere.color >> 24;
+
+			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
+			record.color.xyz = color * UNPACK_RGB8(pixel);
 			roughness = currentSphere.roughness;
+			if (textureIndex == 3)
+			{
+				record.normal = (float3)(1.0f) - record.normal;
+				sun = 1.0f;
+				// result = record.color*0.8f; goto end; 
+			}
 		}
 	
 		if (besthit.distance > InfMinusOne) 
 		{
- 			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction)];
+ 			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
 			float3 skybox_sample = UNPACK_RGB8(pixel);			
 			result += skybox_sample * ray.energy;
-			break;
+			goto end;
+			//break;
 		}
 	
 		ray.origin = record.point;
@@ -153,17 +165,18 @@ kernel void Trace (
 		ray.direction = reflect(ray.direction, record.normal); // wo = ray.direction now = outgoing ray direction
 	
 		// check Shadow
+		float3 lightDir = normalize(record.point);
 		Ray shadowRay = CreateRay(ray.origin, -lightDir);
 		besthit = CreateRayHit();
 		float shadow = 1.0f; 
 	
-		for (int i = 0; i < trace_args.numSpheres; ++i) 
-		IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
-	
-		if (besthit.distance < InfMinusOne || IntersectPlane(ray, &besthit)) shadow = atmosphericLight; 
+		// for (int i = 0; i < trace_args.numSpheres; ++i) 
+		// IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
+	    // 
+		// if (besthit.distance < InfMinusOne || IntersectPlane(shadowRay, &besthit)) shadow = atmosphericLight; 
 	
 		// Shade
-		float ndl = max(dot(record.normal, -lightDir), atmosphericLight);
+		float ndl = max(max(dot(record.normal, -lightDir), atmosphericLight), sun);
 		atmosphericLight *= 0.4f;
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); // color.w = roughness
 	
@@ -172,8 +185,8 @@ kernel void Trace (
 		
 		lightDir = ray.direction;
 		
-		if ((ray.energy.x + ray.energy.y + ray.energy.z) < 0.015f) break;
+		// if ((ray.energy.x + ray.energy.y + ray.energy.z) < 0.015f) break;
 	}
-
+	end:
 	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 0.1f));
 }

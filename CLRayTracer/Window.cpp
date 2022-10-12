@@ -10,11 +10,14 @@ namespace Window
 	GLFWwindow* window;
 
 	int Width = 900, Height = 700;
+	bool Focused = true;
 	Vector2i monitorScale;
 
 	double dt;
 	
 	void EndFrame() { glfwSwapInterval(1); glfwSwapBuffers(window); }
+
+	bool IsFocused() { return Focused; }
 
 	Vector2i GetMonitorScale() { return monitorScale; }
 	Vector2i GetWindowScale()  { return Vector2i(Width, Height); }
@@ -82,6 +85,11 @@ namespace Window
 		Width = width; Height = height;
 		Renderer::OnWindowResize(width, height);
 	}
+
+	void FocusCallback(GLFWwindow* window, int focused)
+	{
+		Focused = focused;
+	}
 }
 
 int Window::Create()
@@ -100,6 +108,7 @@ int Window::Create()
 	// Set the required callback functions
 	glfwSetKeyCallback(window, Window::KeyCallback);
 	glfwSetWindowSizeCallback(window, Window::WindowCallback);
+	glfwSetWindowFocusCallback(window, Window::FocusCallback);
 
 	const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	monitorScale.x = vidMode->width;
