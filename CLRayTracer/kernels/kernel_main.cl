@@ -27,11 +27,6 @@ typedef struct _HitRecord
 	float3 color, normal, point;
 } HitRecord;
 
-// ---- CONSTANTS ----
-
-constant float Infinite = 99999.0f;
-constant float InfMinusOne = 99998.0f;
-
 // ---- CONSTRUCTORS ----
 
 RayHit CreateRayHit() {
@@ -80,6 +75,7 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
 	return false;
 }
 
+
 // ---- Kernels ----
 kernel void RayGen (
 	int width, int height,
@@ -93,32 +89,31 @@ kernel void RayGen (
 	float4 target = MatMul(inverseProjection, (float4)(coord, 1.0f, 1.0f));
 	target /= target.w;
 	target.w = 0;
-	target.xyz = normalize(target.xyz);
-	float3 rayDir = MatMul(inverseView, target).xyz;
+	target.xyz = target.xyz;
+	float3 rayDir = normalize(MatMul(inverseView, target).xyz);
 	vstore3(rayDir, i + j * width, rays);
 }
 
 kernel void Trace (
-	write_only image2d_t inout,
-	read_only image2d_t skybox, 
+	write_only image2d_t screen,
+	global const Texture* textures,
+	global const RGB8* texturePixels,
 	global const float* rays, 
 	global const Sphere* spheres,
-	TraceArgs trace_args,
-	float time
+	TraceArgs trace_args
 ) 
 {
 	const int i = get_global_id(0), j = get_global_id(1);
 	constant float oneDivGamma = 1.0f / 1.2f;
-	constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
-
-	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(i + j * get_image_width(inout), rays));
-
+	
+	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(i + j * get_image_width(screen), rays));
+	
 	float3 lightDir = (float3)(0.5f, -0.5f, 0.0f);//(float3)(sin(0.45f), cos(0.45f), 0.0f); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float atmosphericLight = 0.2f;
-
+	
 	RandState randState = GenRandomState();
-
+	
 	for (int j = 0; j < 3; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
@@ -136,18 +131,23 @@ kernel void Trace (
 		else
 		{
 			Sphere currentSphere = spheres[besthit.index];
+			float3 center = vload3(0, currentSphere.position);
 			record.point = ray.origin + ray.direction * besthit.distance;
-			record.normal.xyz = normalize(record.point - vload3(0, currentSphere.position));
-			record.color.xyz = UnpackRGB8(currentSphere.color);
+			record.normal.xyz = fast_normalize(record.point - center);
+			// int rand = Next(&randState) % 3 + 3;
+			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[3]);
+			record.color.xyz  = UNPACK_RGB8(pixel); //UnpackRGB8u(currentSphere.color);// ;
 			roughness = currentSphere.roughness;
 		}
-
-		if (besthit.distance > InfMinusOne) {
-			float3 skybox_sample = read_imagef(skybox, sampler, GetSkyboxUV(ray.direction)).xyz * 1.20f;
+	
+		if (besthit.distance > InfMinusOne) 
+		{
+ 			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction)];
+			float3 skybox_sample = UNPACK_RGB8(pixel);			
 			result += skybox_sample * ray.energy;
 			break;
 		}
-
+	
 		ray.origin = record.point;
 		ray.origin += record.normal * 0.001f;
 		ray.direction = reflect(ray.direction, record.normal); // wo = ray.direction now = outgoing ray direction
@@ -156,17 +156,17 @@ kernel void Trace (
 		Ray shadowRay = CreateRay(ray.origin, -lightDir);
 		besthit = CreateRayHit();
 		float shadow = 1.0f; 
-
+	
 		for (int i = 0; i < trace_args.numSpheres; ++i) 
 		IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
-
+	
 		if (besthit.distance < InfMinusOne || IntersectPlane(ray, &besthit)) shadow = atmosphericLight; 
-
+	
 		// Shade
 		float ndl = max(dot(record.normal, -lightDir), atmosphericLight);
 		atmosphericLight *= 0.4f;
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); // color.w = roughness
-
+	
 		result += ray.energy * (record.color * ndl);
 		ray.energy *= specular;
 		
@@ -174,6 +174,6 @@ kernel void Trace (
 		
 		if ((ray.energy.x + ray.energy.y + ray.energy.z) < 0.015f) break;
 	}
-	
-	write_imagef(inout, (int2)(i, j), (float4)(pow(result, oneDivGamma), 0.1f));
+
+	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 0.1f));
 }

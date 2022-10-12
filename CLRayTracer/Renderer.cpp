@@ -11,10 +11,7 @@
 #include "Logger.hpp"
 #include "Math/Camera.hpp"
 #include "Math/Random.hpp"
-
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_ONLY_JPEG
-#include <stb_image.h>
+#include "ResourceManager.hpp"
 
 // todo: 
 //      specular, reflections
@@ -43,22 +40,19 @@ void main()\
 	color = texture(texture0, texCoord);\
 }";
 
-	enum KernelIndex {
-		eKernelGenRays, eKernelTrace
-	};
-
 	cl_context context;
 	cl_kernel traceKernel, rayGenKernel;
 	cl_command_queue command_queue;
 	cl_program program;
 
-	cl_mem clglTexture, rayMem, clglSkybox, sphereMem;
+	cl_mem clglTexture, rayMem, sphereMem;
+	TextureHandle earthHandle, meHandle, smileHandle;
 	constexpr int numSpheres = 25;
 	Sphere spheres[numSpheres];
 
 	GLuint VAO;
 	GLuint shaderProgram;
-	GLuint screenTexture, skyboxTexture;
+	GLuint screenTexture;
 	Camera camera;
 }
 
@@ -111,18 +105,12 @@ int Renderer::Initialize()
 		glDeleteShader(fragmentShader);
 		glUseProgram(shaderProgram);
 
-		int width, height, channels;
-		unsigned char* skyboxData = stbi_load("../Assets/cape_hill_4k.jpg", &width, &height, &channels, 3);
-		if (!skyboxData) { AXERROR("cannot load skybox image"); return 0; }
-		
-		CreateGLTexture(skyboxTexture, width, height, skyboxData);
 		CreateGLTexture(screenTexture, Window::GetWidth(), Window::GetHeight());
 		glActiveTexture(GL_TEXTURE0);
 		
 		// create empty vao unfortunately this step is necessary for ogl 3.2
 		glGenVertexArrays(1, &VAO);
 		glBindVertexArray(VAO);
-		free(skyboxData);
 	}
 	
 	cl_int clerr;
@@ -175,23 +163,9 @@ int Renderer::Initialize()
 		delete[] buildLog;
 		return 0;
 	}
-	
-	// specify which kernel from the program to execute
-	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
 
-	traceKernel  = clCreateKernel(program, "Trace", &clerr); assert(clerr == 0);
-	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
-
-	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
-	clglSkybox  = clCreateFromGLTexture(context, CL_MEM_READ_ONLY , GL_TEXTURE_2D, 0, skyboxTexture, &clerr); 
-	
-	if (clerr != CL_SUCCESS ) {
-		AXERROR("texture creation failed with error code: %d", clerr);
-		return 0;
-	}
-
+	// create random sphere positions&colors
 	Random::PCG pcg{};
-
 	for (int i = 0; i < 5; i++)
 	{
 		for (int j = 0; j < 5; j++)
@@ -204,6 +178,21 @@ int Renderer::Initialize()
 			spheres[i + j * 5].color = pcg.NextBound(255u) | (pcg.NextBound(255u) << 8) | (pcg.NextBound(255u) << 16);	
 		}
 	}
+	
+	// specify which kernel from the program to execute
+	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
+
+	traceKernel  = clCreateKernel(program, "Trace", &clerr); assert(clerr == 0);
+	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
+
+	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
+
+	ResourceManager::Initialize();
+	ResourceManager::ImportTexture("../Assets/cape_hill_4k.jpg");
+	earthHandle = ResourceManager::ImportTexture("../Assets/earthmap.jpg");
+	earthHandle = ResourceManager::ImportTexture("../Assets/me.jpg");
+	//earthHandle = ResourceManager::ImportTexture("../Assets/smile.jpg");
+	ResourceManager::PushTexturesToGPU(context);
 
 	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
 
@@ -255,18 +244,17 @@ void Renderer::Render()
 	// execute ray generation
 	clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
 	// prepare Rendering
-	cl_mem textures[2] = { clglTexture, clglSkybox };
 	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
 	
 	clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglTexture);    assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), &clglSkybox);  assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &rayMem);   	 	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 4, sizeof(TraceArgs), &trace_args);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 5, sizeof(float), &time);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); 	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &rayMem);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 5, sizeof(TraceArgs), &trace_args);   	assert(clerr == 0);
 	// execute rendering
-	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0); assert(clerr == 0);
-	clerr = clEnqueueReleaseGLObjects(command_queue, 2, textures, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
+	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
 
 	clFinish(command_queue);
 
@@ -278,7 +266,8 @@ void Renderer::Terminate()
 {
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteProgram(shaderProgram);
-	glDeleteTextures(1, &skyboxTexture); glDeleteTextures(1, &screenTexture);
+	glDeleteTextures(1, &screenTexture);
+	ResourceManager::Destroy();
 
 	// cleanup - release OpenCL resources
 	clReleaseMemObject(clglTexture);
