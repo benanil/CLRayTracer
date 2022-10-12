@@ -2,6 +2,7 @@
 #define __SSE__
 #define __SSE2__
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_JPEG
 #include <stb_image.h>
 #include <malloc.h>
 #include "Logger.hpp"
