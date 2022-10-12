@@ -177,12 +177,12 @@ int Renderer::Initialize()
 
 	ResourceManager::Initialize();
 
-	char skyTexture     = ResourceManager::ImportTexture("../Assets/8k_stars_milky_way.jpg");
-	char sunTexture     = ResourceManager::ImportTexture("../Assets/2k_sun.jpg");
-	char earthTexture   = ResourceManager::ImportTexture("../Assets/earthmap.jpg");
-	char moonTexture    = ResourceManager::ImportTexture("../Assets/2k_moon.jpg");
-	char marsTexture    = ResourceManager::ImportTexture("../Assets/2k_mars.jpg");
-	char jupiterTexture = ResourceManager::ImportTexture("../Assets/2k_jupiter.jpg");
+	char skyTexture     = ResourceManager::ImportTexture("Assets/8k_stars_milky_way.jpg");
+	char sunTexture     = ResourceManager::ImportTexture("Assets/2k_sun.jpg");
+	char earthTexture   = ResourceManager::ImportTexture("Assets/earthmap.jpg");
+	char moonTexture    = ResourceManager::ImportTexture("Assets/2k_moon.jpg");
+	char marsTexture    = ResourceManager::ImportTexture("Assets/2k_mars.jpg");
+	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 
 	ResourceManager::PushTexturesToGPU(context);
 
