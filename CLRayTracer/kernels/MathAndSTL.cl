@@ -109,11 +109,11 @@ typedef struct __attribute__((packed)) _RGBA8
 	unsigned char r,g,b;
 } RGB8;
 
-int SampleSkyboxPixel(float3 rayDirection)
+int SampleSkyboxPixel(float3 rayDirection, Texture texture)
 {
-	int theta = (int)(atan2pi(rayDirection.x, -rayDirection.z) * 0.5f * 4096.0f); 
-	int phi = (int)(acospi(rayDirection.y) * 2048.0f); 
-	return phi * 4096 + theta + 2;
+	int theta = (int)(atan2pi(rayDirection.x, -rayDirection.z) * 0.5f * (float)(texture.width)); 
+	int phi = (int)(acospi(rayDirection.y) * (float)(texture.height)); 
+	return phi * texture.width + theta + 2;
 }
 
 int SampleSphereTexture(float3 position, float3 center, Texture texture)

@@ -2,6 +2,7 @@
 #define __SSE__
 #define __SSE2__
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_JPEG
 #include <stb_image.h>
 #include <malloc.h>
 #include "Logger.hpp"
@@ -37,6 +38,7 @@ void ResourceManager::PushTexturesToGPU(cl_context context)
 	cl_int clerr;
 	textureDataMem   = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, arenaOffset, arena, &clerr); assert(clerr == 0);
 	textureHandleMem = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, sizeof(Texture) * numTextures, textures, &clerr); assert(clerr == 0);
+	delete[] arena;
 }
 
 void ResourceManager::Initialize()
@@ -56,5 +58,4 @@ void ResourceManager::Destroy()
 {
 	clReleaseMemObject(textureHandleMem);
 	clReleaseMemObject(textureDataMem);
-	delete[] arena;
 }

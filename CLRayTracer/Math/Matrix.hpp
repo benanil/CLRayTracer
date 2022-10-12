@@ -149,8 +149,8 @@ struct Matrix4
 		Vector4 EyeDirection = _mm_sub_ps(_mm_setzero_ps(), _mm_loadu_ps(&center.x));
 		Vector4 UpDirection  = _mm_loadu_ps(&up.x);
 
-		R0 = SSEVector3Cross(UpDirection, EyeDirection);
-		R1 = SSEVector3Cross(EyeDirection, R0);
+		R0 = SSEVector3Normalize(SSEVector3Cross(UpDirection, EyeDirection));
+		R1 = SSEVector3Normalize(SSEVector3Cross(EyeDirection, R0));
 
 		NegEyePosition = _mm_sub_ps(_mm_setzero_ps(), EyePosition);
 

@@ -10,6 +10,7 @@ namespace Window
 	unsigned GetWidth();
 	unsigned GetHeight();
 	void ChangeName(float ms);
+	bool IsFocused();
 	
 	// TIME
 	double GetTime();
