@@ -6,7 +6,7 @@
 
 typedef struct _TraceArgs{
 	float cameraPos[3];
-	int numSpheres;
+	ushort numSpheres, numMeshes;
 } TraceArgs;
 
 typedef struct _RayHit {
@@ -67,6 +67,7 @@ bool IntersectSphere(float3 position, float radius, Ray ray, RayHit* besthit, in
 
 bool IntersectPlane(Ray ray, RayHit* besthit)
 {
+	return false;
 	float t = -ray.origin.y / ray.direction.y;
     if (t > 0 && t < besthit->distance) 
 	{
@@ -76,6 +77,59 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
     	return true;
 	}
 	return false;
+}
+
+typedef struct __attribute((packed)) _Triangle
+{
+	float3 x, y, z;
+} Triangle;
+
+typedef struct __attribute((packed)) _Vertex {
+	float x, y, z;
+} Vertex;
+
+typedef struct __attribute((packed)) _Index {
+	unsigned p, t, n;
+} Index;
+
+typedef struct _Triout {
+	float t, u, v;
+} Triout;
+
+typedef struct _Mesh {
+	int indexCount;
+} Mesh;
+
+constant float EPSILON = 1e-8;
+
+bool IntersectTriangle(Ray ray, Triangle triangle, Triout* o, RayHit* besthit)
+{
+    // find vectors for two edges sharing vert0
+	float3 edge1 = triangle.y - triangle.x;
+	float3 edge2 = triangle.z - triangle.x;
+    // begin calculating determinant - also used to calculate U parameter
+    float3 pvec = cross(ray.direction, edge2);
+    // if determinant is near zero, ray lies in plane of triangle
+    float det = dot(edge1, pvec);
+    // use backface culling
+    if (det < EPSILON) 
+		return false;
+    float inv_det = 1.0f / det;
+    // calculate distance from vert0 to ray origin
+    float3 tvec = ray.origin - triangle.x;
+    // calculate U parameter and test bounds
+    o->u = dot(tvec, pvec) * inv_det;
+    if (o->u < 0.0f || o->u > 1.0f)
+        return false;
+    // prepare to test V parameter
+    float3 qvec = cross(tvec, edge1);
+    // calculate V parameter and test bounds
+    o->v = dot(ray.direction, qvec) * inv_det;
+    if (o->v < 0.0f || o->u + o->v > 1.0f)
+        return false;
+    // calculate t, ray intersects triangle
+    o->t = dot(edge2, qvec) * inv_det;
+    return o->t < besthit->distance;
 }
 
 // ---- Kernels ----
@@ -97,6 +151,9 @@ kernel void Trace (
 	write_only image2d_t screen,
 	global const Texture* textures,
 	global const RGB8* texturePixels,
+	global const Mesh* meshes,
+	global const unsigned* indices,
+	global const Vertex* vertices,
 	global const float* rays, 
 	global const Sphere* spheres,
 	TraceArgs trace_args
@@ -113,7 +170,7 @@ kernel void Trace (
 	
 	RandState randState = GenRandomState();
 	
-	for (int j = 0; j < 3; ++j)// num bounces
+	for (int j = 0; j < 1; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
 		HitRecord record = CreateHitRecord();
@@ -140,7 +197,28 @@ kernel void Trace (
 			record.color.xyz = color * UNPACK_RGB8(pixel);
 			roughness = currentSphere.roughness;
 		}
-	
+
+		for (int m = 0; m < trace_args.numMeshes; ++m)
+		{
+			Mesh mesh = meshes[m];
+			for (int i = 0; i < mesh.indexCount; i += 3)
+			{
+				Triangle triangle;
+				triangle.x = vload3(0, &vertices[indices[i + 0]].x);
+				triangle.y = vload3(0, &vertices[indices[i + 1]].x);
+				triangle.z = vload3(0, &vertices[indices[i + 2]].x);
+				
+				Triout triout;
+				if (IntersectTriangle(ray, triangle, &triout, &besthit))
+				{
+					record.point = ray.origin + triout.t * ray.direction;
+					record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x)); // maybe precalculate
+					record.color = (float3)(0.8f, 0.8f,0.8f);
+					besthit.distance = triout.t;
+				}
+			}
+		}
+
 		if (besthit.distance > InfMinusOne) 
 		{
  			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
@@ -154,15 +232,11 @@ kernel void Trace (
 		ray.direction = reflect(ray.direction, record.normal); // wo = ray.direction now = outgoing ray direction
 	
 		// check Shadow
-		Ray shadowRay = CreateRay(ray.origin, -lightDir);
-		besthit = CreateRayHit();
+		// Ray shadowRay = CreateRay(ray.origin, -lightDir);
+		// besthit = CreateRayHit();
 		float shadow = 1.0f; 
 	
-		// todo only for directional light
-		for (int i = 0; i < trace_args.numSpheres; ++i) 
-		IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
-	    
-		//if (besthit.distance < InfMinusOne || IntersectPlane(shadowRay, &besthit)) shadow = atmosphericLight; 
+		// todo shadow for only directional light
 	
 		// Shade
 		float ndl = max(dot(record.normal, -lightDir), atmosphericLight);

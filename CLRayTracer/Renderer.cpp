@@ -45,7 +45,7 @@ void main()\
 	cl_command_queue command_queue;
 	cl_program program;
 
-	cl_mem clglTexture, rayMem, sphereMem;
+	cl_mem clglScreen, rayMem, sphereMem, vertexMem, indexMem;
 	constexpr int numSpheres = 5;
 	Sphere spheres[numSpheres];
 
@@ -186,6 +186,11 @@ int Renderer::Initialize()
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 
 	ResourceManager::PushTexturesToGPU(context);
+	
+	ResourceManager::PrepareMeshes();
+		ResourceManager::ImportMesh("Assets/simplify_bunny.obj");
+	ResourceManager::PushMeshesToGPU(context);
+
 	Random::PCG pcg{};
 	// create random sphere positions&colors
 	constexpr float pi5 = PI / 5.0f;
@@ -201,7 +206,7 @@ int Renderer::Initialize()
 	traceKernel  = clCreateKernel(program, "Trace", &clerr); assert(clerr == 0);
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
 
-	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
+	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
 
 	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
 
@@ -214,12 +219,12 @@ void Renderer::OnWindowResize(int width, int height)
 {
 	if (width < 16 || height < 16) return;
 	clFinish(command_queue); cl_int clerr;
-	clReleaseMemObject(clglTexture);
+	clReleaseMemObject(clglScreen);
 	clReleaseMemObject(rayMem);
 	glDeleteTextures(1, &screenTexture);
-	rayMem = clglTexture = nullptr; screenTexture = 0u;
+	rayMem = clglScreen = nullptr; screenTexture = 0u;
 	CreateGLTexture(screenTexture, width, height);
-	clglTexture = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr);  assert(clerr == 0);
+	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr);  assert(clerr == 0);
 	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * width * height, nullptr, &clerr); assert(clerr == 0);
 	glViewport(0, 0, width, height);
 	camera.RecalculateProjection(width, height);
@@ -239,11 +244,12 @@ void Renderer::Render()
 
 	struct TraceArgs {
 		Vector3f cameraPosition;
-		int numSpheres;
+		ushort numSpheres, numMeshes;
 	} trace_args;
 
 	trace_args.cameraPosition = camera.position;
 	trace_args.numSpheres = numSpheres;
+	trace_args.numMeshes = ResourceManager::GetNumMeshes();
 
 	cl_int clerr; cl_event event;
 
@@ -256,17 +262,20 @@ void Renderer::Render()
 	// execute ray generation
 	clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
 	// prepare Rendering
-	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
 	
-	clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglTexture);    assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); 	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &rayMem);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 5, sizeof(TraceArgs), &trace_args);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen);    assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()  ); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), ResourceManager::GetMeshesMem()       ); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshIndexMem()    ); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), ResourceManager::GetMeshVertexMem()   ); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 8, sizeof(TraceArgs), &trace_args); assert(clerr == 0);
 	// execute rendering
 	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
-	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglTexture, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
 
 	clFinish(command_queue);
 
@@ -282,7 +291,7 @@ void Renderer::Terminate()
 	ResourceManager::Destroy();
 
 	// cleanup - release OpenCL resources
-	clReleaseMemObject(clglTexture);
+	clReleaseMemObject(clglScreen);
 	clReleaseMemObject(rayMem);
 	clReleaseMemObject(sphereMem);
 	clReleaseProgram(program);

@@ -104,7 +104,7 @@ typedef struct _Texture {
 	int width, height, offset, padd;
 } Texture;
 
-typedef struct __attribute__((packed)) _RGBA8 
+typedef struct __attribute__((packed)) _RGB8 
 {
 	unsigned char r,g,b;
 } RGB8;
