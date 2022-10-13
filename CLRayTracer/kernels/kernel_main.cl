@@ -112,8 +112,7 @@ bool IntersectTriangle(Ray ray, Triangle triangle, Triout* o, RayHit* besthit)
     // if determinant is near zero, ray lies in plane of triangle
     float det = dot(edge1, pvec);
     // use backface culling
-    if (det < EPSILON) 
-		return false;
+    //if (det < EPSILON)  return false;
     float inv_det = 1.0f / det;
     // calculate distance from vert0 to ray origin
     float3 tvec = ray.origin - triangle.x;

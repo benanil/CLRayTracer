@@ -188,7 +188,7 @@ int Renderer::Initialize()
 	ResourceManager::PushTexturesToGPU(context);
 	
 	ResourceManager::PrepareMeshes();
-		ResourceManager::ImportMesh("Assets/simplify_bunny.obj");
+		ResourceManager::ImportMesh("Assets/car.obj");
 	ResourceManager::PushMeshesToGPU(context);
 
 	Random::PCG pcg{};
