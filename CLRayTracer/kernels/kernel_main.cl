@@ -126,7 +126,12 @@ bool IntersectAABB(float3 origin, float3 invDir, float3 aabbMin, float3 aabbMax,
 	float tnear = Max3(fmin(tmin, tmax));
 	float tfar  = Min3(fmax(tmin, tmax));
 	return tnear < tfar && tnear > 0.0f && tnear < minSoFar;
+	// if (tnear < tfar && tnear > 0.0f && tnear < minSoFar)
+	// 	return tnear; else return 1e30f;
 }
+
+#define SWAPF(x, y) float tf = x; x = y, y = tf;
+#define SWAPUINT(x, y) uint tu = x; x = y, y = tu;
 
 int IntersectBVH(Ray ray, const global BVHNode* nodes, const global Triangle* tris, Triout* out)
 {
@@ -155,6 +160,41 @@ int IntersectBVH(Ray ray, const global BVHNode* nodes, const global Triangle* tr
 		}
 	}
 	return intersection;
+	// int nodesToVisit[48] = { 0 };
+	// int currentNodeIndex = 1;
+	// float3 invDir = (float3)(1.0f) / ray.direction;
+	// int intersection = 0;
+	// 
+	// while (currentNodeIndex > 0)
+	// {	
+	// 	const global BVHNode* node = nodes + nodesToVisit[--currentNodeIndex];
+	// 	traverse:
+	// 	if (GetTriCount(node) > 0) // is leaf 
+	// 	{
+	// 		for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
+	// 			intersection |= IntersectTriangle(ray, tris[i], out, i);
+	// 		continue;
+	// 	}
+	// 
+	// 	uint leftIndex  = GetLeftFirst(node);
+	// 	uint rightIndex = leftIndex + 1;
+	// 	BVHNode leftNode  = nodes[leftIndex];
+	// 	BVHNode rightNode = nodes[rightIndex];
+	// 	
+	// 	float dist1 = IntersectAABB(ray.origin, invDir, leftNode.min.xyz , leftNode.max.xyz , out->t);
+	// 	float dist2 = IntersectAABB(ray.origin, invDir, rightNode.min.xyz, rightNode.max.xyz, out->t);
+	// 
+	// 	if (dist1 > dist2) { SWAPF(dist1, dist2); SWAPUINT(leftIndex, rightIndex); }
+	// 	
+	// 	if (dist1 == 1e30f) continue;
+	// 	else
+	// 	{
+	// 		node = nodes + leftIndex;
+	// 		if (dist2 != 1e30f) nodesToVisit[currentNodeIndex++] = rightIndex;
+	// 		goto traverse;
+	// 	}
+	// }
+	// return intersection;
 }
 
 // ---- KERNELS ----

@@ -55,7 +55,7 @@ void main()\
 }
 
 typedef void (*GLFWglproc)(void);
-extern "C" {  GLFWglproc glfwGetProcAddress(const char* procname); }
+extern "C" GLFWglproc glfwGetProcAddress(const char* procname); 
 
 void CreateGLTexture(GLuint& texture, int width, int height, void* data = nullptr)
 {
@@ -170,7 +170,7 @@ int Renderer::Initialize()
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &param_value_size);
 		char* buildLog = new char[param_value_size + 2]; buildLog[0] = '\n';
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, param_value_size, buildLog + 1, NULL);
-		AXWARNING(buildLog); 
+		AXERROR(buildLog); 
 		delete[] buildLog;
 		return 0;
 	}
@@ -187,7 +187,7 @@ int Renderer::Initialize()
 	ResourceManager::PushTexturesToGPU(context);
 	
 	ResourceManager::PrepareMeshes();
-		ResourceManager::ImportMesh("Assets/car.obj");
+		ResourceManager::ImportMesh("Assets/bunny.obj");
 	ResourceManager::PushMeshesToGPU(context);
 
 	Random::PCG pcg{};

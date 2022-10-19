@@ -3,13 +3,6 @@
 #include "Math/Vector.hpp"
 #include "Common.hpp"
 
-// max texture and image etc: 16 texture, 16 mesh
-#ifndef CL_MAX_RESOURCE
-#	define CL_MAX_RESOURCE 16
-#endif
-// 10mb for both textures and images
-constexpr size_t CL_MAX_RESOURCE_MEMORY = 1.049e+7 * 10; //*10 because jpeg compression
-
 struct Texture
 {
 	int width, height, offset, padd;

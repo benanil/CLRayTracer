@@ -58,6 +58,7 @@ struct Vector3f
 	constexpr Vector3f(float a, float b, float c) : x(a), y(b), z(c) { }
 	
 	float& operator[] (int index) { return arr[index]; }
+	float operator[] (int index) const { return arr[index]; }
 
 	float Length() const { return sqrtf(LengthSquared()); }
 	constexpr float LengthSquared() const { return x * x + y * y + z * z; }
@@ -139,6 +140,9 @@ typedef Vector3f float3;
 
 FINLINE float3 fminf(const float3& a, const float3& b) { return float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)); }
 FINLINE float3 fmaxf(const float3& a, const float3& b) { return float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)); }
+
+FINLINE float Max3(float3 a) { return fmaxf(fmaxf(a.x, a.y), a.z); }
+FINLINE float Min3(float3 a) { return fminf(fminf(a.x, a.y), a.z); }
 
 inline Vector2f ToVector2f(const Vector2i& vec) { return Vector2f((float)vec.x, (float)vec.y); }
 

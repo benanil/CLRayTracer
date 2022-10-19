@@ -148,6 +148,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BVH.cpp" />
     <ClCompile Include="CLRayTracer.cpp" />
     <ClCompile Include="glad.cpp" />
     <ClCompile Include="Helper.cpp" />
@@ -158,7 +159,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Array.hpp" />
-    <ClInclude Include="BVH.cpp" />
     <ClInclude Include="Math\Camera.hpp" />
     <ClInclude Include="cl.hpp" />
     <ClInclude Include="CLHelper.hpp" />
