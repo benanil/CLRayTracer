@@ -47,12 +47,18 @@ struct Vector2
 
 struct Vector3f
 {
-	float x, y, z;
+	union
+	{
+		struct { float x, y, z; };
+		float arr[3];
+	};
 
 	Vector3f() : x(0), y(0), z(0) { }
-	explicit constexpr Vector3f(float scale) : x(scale), y(scale), z(scale) { }
+	constexpr Vector3f(float scale) : x(scale), y(scale), z(scale) { }
 	constexpr Vector3f(float a, float b, float c) : x(a), y(b), z(c) { }
 	
+	float& operator[] (int index) { return arr[index]; }
+
 	float Length() const { return sqrtf(LengthSquared()); }
 	constexpr float LengthSquared() const { return x * x + y * y + z * z; }
 
@@ -129,12 +135,11 @@ struct Vector3f
 using Vector2f = Vector2<float>;
 using Vector2i = Vector2<int>;
 
-inline Vector2f ToVector2f(const Vector2i& vec)
-{
-	return Vector2f((float)vec.x, (float)vec.y);
-}
+typedef Vector3f float3;
 
-inline Vector2i ToVector2f(const Vector2f& vec)
-{
-	return Vector2i((int)vec.x, (int)vec.y);
-}
+FINLINE float3 fminf(const float3& a, const float3& b) { return float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)); }
+FINLINE float3 fmaxf(const float3& a, const float3& b) { return float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)); }
+
+inline Vector2f ToVector2f(const Vector2i& vec) { return Vector2f((float)vec.x, (float)vec.y); }
+
+inline Vector2i ToVector2f(const Vector2f& vec) { return Vector2i((int)vec.x, (int)vec.y);  }

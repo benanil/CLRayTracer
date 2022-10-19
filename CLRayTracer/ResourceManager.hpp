@@ -1,5 +1,6 @@
 #pragma once
 #include "cl.hpp"
+#include "Math/Vector.hpp"
 #include "Common.hpp"
 
 // max texture and image etc: 16 texture, 16 mesh
@@ -14,9 +15,21 @@ struct Texture
 	int width, height, offset, padd;
 };
 
-struct Mesh
+AX_ALIGNED(16) struct BVHNode
 {
-	int indexCount;
+	struct { float3 aabbMin; uint leftFirst; };
+	struct { float3 aabbMax; uint triCount; };
+	bool isLeaf() const { return triCount > 0; }
+};
+
+struct Mesh {
+	int triangleStart, numTriangles;
+};
+
+struct Tri { 
+	float3 vertex0; float padd; 
+	float3 vertex1; float padd1; 
+	float3 vertex2; float padd3; 
 };
 
 typedef int TextureHandle;
@@ -32,8 +45,8 @@ namespace ResourceManager
 	
 	cl_mem* GetTextureHandleMem();
 	cl_mem* GetTextureDataMem();
-	cl_mem* GetMeshVertexMem();
-	cl_mem* GetMeshIndexMem();
+	cl_mem* GetMeshTriangleMem();
+	cl_mem* GetBVHMem();
 	cl_mem* GetMeshesMem();
 
 	void PrepareMeshes();

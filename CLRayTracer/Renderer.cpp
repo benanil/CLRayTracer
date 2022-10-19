@@ -15,8 +15,7 @@
 
 // todo: 
 //      specular, reflections
-//      plane, shadow, optimize
-// triangle intersection
+//      shadow, optimize, brdf
 
 namespace 
 {
@@ -164,7 +163,7 @@ int Renderer::Initialize()
 	
 	delete[] kernelCode;
 	// compile the program
-	if (clBuildProgram(program, 0, NULL, NULL, NULL, NULL) != CL_SUCCESS)
+	if (clBuildProgram(program, 0, NULL, "-Werror -cl-single-precision-constant -cl-mad-enable", NULL, NULL) != CL_SUCCESS)
 	{
 		AXERROR("Error building program");
 		size_t param_value_size;
@@ -268,11 +267,12 @@ void Renderer::Render()
 	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); assert(clerr == 0);
 	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()  ); assert(clerr == 0);
 	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), ResourceManager::GetMeshesMem()       ); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshIndexMem()    ); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), ResourceManager::GetMeshVertexMem()   ); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 8, sizeof(TraceArgs), &trace_args); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshTriangleMem() ); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), ResourceManager::GetBVHMem()); assert(clerr == 0);
+
 	// execute rendering
 	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
 	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);

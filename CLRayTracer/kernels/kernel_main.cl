@@ -22,10 +22,28 @@ typedef struct __attribute__((packed)) _Sphere {
 	uint  color; // w texture index
 } Sphere;
 
-typedef struct _HitRecord
-{
+typedef struct _HitRecord {
 	float3 color, normal, point;
 } HitRecord;
+
+typedef struct __attribute((packed)) _Triangle {
+	float3 x, y, z;
+} Triangle;
+
+typedef struct _Triout {
+	float t, u, v; uint triIndex;
+} Triout;
+
+typedef struct _Mesh {
+	int triangleStart, numTriangles;
+} Mesh;
+
+typedef struct _BVHNode {
+	float4 min, max; 
+} BVHNode;
+
+#define GetLeftFirst(nod) (as_uint((nod)->min.w))
+#define GetTriCount(nod)  (as_uint((nod)->max.w))
 
 // ---- CONSTRUCTORS ----
 
@@ -34,11 +52,10 @@ RayHit CreateRayHit() {
     return hit;
 }
 
-HitRecord CreateHitRecord()
-{
+HitRecord CreateHitRecord() {
 	HitRecord record;
 	record.color  = (float3)(0.90f, 0.90f, 0.90f); // plane color
-	record.normal = (float3)(0.0f, 1.0f, 0.0f);// w = roughness
+	record.normal = (float3)(0.0f, 1.0f, 0.0f);
 	return record;
 }
 
@@ -79,95 +96,90 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
 	return false;
 }
 
-typedef struct __attribute((packed)) _Triangle
+bool IntersectTriangle(Ray ray, Triangle tri, Triout* o, int i)
 {
-	float3 x, y, z;
-} Triangle;
-
-typedef struct __attribute((packed)) _Vertex {
-	float x, y, z;
-} Vertex;
-
-typedef struct __attribute((packed)) _Index {
-	unsigned p, t, n;
-} Index;
-
-typedef struct _Triout {
-	float t, u, v;
-} Triout;
-
-typedef struct _Mesh {
-	int indexCount;
-} Mesh;
-
-constant float EPSILON = 1e-8;
-
-bool IntersectTriangle(Ray ray, Triangle triangle, Triout* o, RayHit* besthit)
-{
-    // find vectors for two edges sharing vert0
-	float3 edge1 = triangle.y - triangle.x;
-	float3 edge2 = triangle.z - triangle.x;
-    // begin calculating determinant - also used to calculate U parameter
-    float3 pvec = cross(ray.direction, edge2);
-    // if determinant is near zero, ray lies in plane of triangle
-    float det = dot(edge1, pvec);
-    // use backface culling
-    //if (det < EPSILON)  return false;
-    float inv_det = 1.0f / det;
-    // calculate distance from vert0 to ray origin
-    float3 tvec = ray.origin - triangle.x;
-    // calculate U parameter and test bounds
-    o->u = dot(tvec, pvec) * inv_det;
-    if (o->u < 0.0f || o->u > 1.0f)
-        return false;
-    // prepare to test V parameter
-    float3 qvec = cross(tvec, edge1);
-    // calculate V parameter and test bounds
-    o->v = dot(ray.direction, qvec) * inv_det;
-    if (o->v < 0.0f || o->u + o->v > 1.0f)
-        return false;
-    // calculate t, ray intersects triangle
-    o->t = dot(edge2, qvec) * inv_det;
-    return o->t < besthit->distance;
+    const float3 edge1 = tri.y - tri.x;
+    const float3 edge2 = tri.z - tri.x;
+    const float3 h = cross( ray.direction, edge2 );
+    const float a = dot( edge1, h );
+    //if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
+    const float f = 1.0f / a;
+    const float3 s = ray.origin - tri.x;
+    const float u = f * dot( s, h );
+    if (u < 0.0f || u > 1.0f) return false;
+    const float3 q = cross( s, edge1 );
+    const float v = f * dot( ray.direction, q );
+    if (v < 0.0f || u + v > 1.0f) return false;
+    const float t = f * dot( edge2, q );
+    if (t > 0.0001f && t < o->t) {
+		o->u = u; o->v = v; o->t = t;
+		o->triIndex = i;
+		return true;
+	}
+	return false;
 }
 
-// ---- Kernels ----
-kernel void RayGen (
-	int width, int height,
-	global float* rays, const Matrix4 inverseView, const Matrix4 inverseProjection
-)
+bool IntersectAABB(float3 origin, float3 invDir, float3 aabbMin, float3 aabbMax, float minSoFar)
 {
-	const int i = get_global_id(0), j = get_global_id(1);
-	float2 coord = (float2)((float)i / (float)width, (float)j / (float)height);
-	coord = coord * 2.0f - 1.0f;
-	float4 target = MatMul(inverseProjection, (float4)(coord, 1.0f, 1.0f));
-	target /= target.w;
-	float3 rayDir = normalize(MatMul(inverseView, target).xyz);
-	vstore3(rayDir, i + j * width, rays);
+	float3 tmin = (aabbMin - origin) * invDir;
+	float3 tmax = (aabbMax - origin) * invDir;
+	float tnear = Max3(fmin(tmin, tmax));
+	float tfar  = Min3(fmax(tmin, tmax));
+	return tnear < tfar && tnear > 0.0f && tnear < minSoFar;
 }
+
+int IntersectBVH(Ray ray, const global BVHNode* nodes, const global Triangle* tris, Triout* out)
+{
+	int nodesToVisit[48] = { 0 };
+	int currentNodeIndex = 1;
+	float3 invDir = (float3)(1.0f) / ray.direction;
+	int intersection = 0;
+
+	while (currentNodeIndex > 0)
+	{
+		const global BVHNode* node = &nodes[nodesToVisit[--currentNodeIndex]];
+		
+		if (!IntersectAABB(ray.origin, invDir, node->min.xyz, node->max.xyz, out->t)) continue;
+
+		if (GetTriCount(node) > 0) // is leaf 
+		{
+			for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
+			{
+				intersection |= IntersectTriangle(ray, tris[i], out, i);
+			}
+		}
+		else {
+			uint leftNode = GetLeftFirst(node);
+			nodesToVisit[currentNodeIndex++] = leftNode;
+			nodesToVisit[currentNodeIndex++] = leftNode + 1;
+		}
+	}
+	return intersection;
+}
+
+// ---- KERNELS ----
 
 kernel void Trace (
 	write_only image2d_t screen,
 	global const Texture* textures,
 	global const RGB8* texturePixels,
 	global const Mesh* meshes,
-	global const unsigned* indices,
-	global const Vertex* vertices,
+	global const Triangle* triangles,
 	global const float* rays, 
 	global const Sphere* spheres,
-	TraceArgs trace_args
+	TraceArgs trace_args,
+	global const BVHNode* nodes
 ) 
 {
 	const int i = get_global_id(0), j = get_global_id(1);
 	constant float oneDivGamma = 1.0f / 1.2f;
 	
-	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(i + j * get_image_width(screen), rays));
+	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
 	
 	float3 lightDir = (float3)(0.5f, -0.5f, 0.0f); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
+	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
 	float atmosphericLight = 0.2f;
-	
-	RandState randState = GenRandomState();
 	
 	for (int j = 0; j < 1; ++j)// num bounces
 	{
@@ -179,8 +191,7 @@ kernel void Trace (
 			IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
 		}
 		
-		if (IntersectPlane(ray, &besthit))
-		{
+		if (IntersectPlane(ray, &besthit)) {
 			record.point = ray.origin + ray.direction * besthit.distance;
 		}
 		else
@@ -197,32 +208,23 @@ kernel void Trace (
 			roughness = currentSphere.roughness;
 		}
 
-		for (int m = 0; m < trace_args.numMeshes; ++m)
+		Triout triout;
+		triout.t = besthit.distance; triout.triIndex = 0;
+		
+		if (IntersectBVH(ray, nodes, triangles, &triout)) 
 		{
-			Mesh mesh = meshes[m];
-			for (int i = 0; i < mesh.indexCount; i += 3)
-			{
-				Triangle triangle;
-				triangle.x = vload3(0, &vertices[indices[i + 0]].x);
-				triangle.y = vload3(0, &vertices[indices[i + 1]].x);
-				triangle.z = vload3(0, &vertices[indices[i + 2]].x);
-				
-				Triout triout;
-				if (IntersectTriangle(ray, triangle, &triout, &besthit))
-				{
-					record.point = ray.origin + triout.t * ray.direction;
-					record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x)); // maybe precalculate
-					record.color = (float3)(0.8f, 0.8f,0.8f);
-					besthit.distance = triout.t;
-				}
-			}
+			Triangle triangle = triangles[triout.triIndex];
+			record.point = ray.origin + triout.t * ray.direction;
+			record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x)); // maybe precalculate
+			record.color = (float3)(0.8f, 0.8f,0.8f);
+			besthit.distance = triout.t;	
 		}
 
 		if (besthit.distance > InfMinusOne) 
 		{
  			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
 			float3 skybox_sample = UNPACK_RGB8(pixel);			
-			result += skybox_sample * ray.energy;
+			result += skybox_sample * energy;
 			break;
 		}
 	
@@ -232,23 +234,31 @@ kernel void Trace (
 	
 		// check Shadow
 		// Ray shadowRay = CreateRay(ray.origin, -lightDir);
-		// besthit = CreateRayHit();
 		float shadow = 1.0f; 
 	
 		// todo shadow for only directional light
 	
 		// Shade
-		float ndl = max(dot(record.normal, -lightDir), atmosphericLight);
+		float ndl = fmax(dot(record.normal, -lightDir), atmosphericLight);
 		atmosphericLight *= 0.4f;
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); // color.w = roughness
 	
-		result += ray.energy * (record.color * ndl);
-		ray.energy *= specular;
+		result += energy * (record.color * ndl);
+		energy *= specular;
 		
 		lightDir = ray.direction;
-		
-		if ((ray.energy.x + ray.energy.y + ray.energy.z) < 0.015f) break;
 	}
 	
 	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 0.1f));
+}
+
+kernel void RayGen(int width, int height, global float* rays, Matrix4 inverseView, Matrix4 inverseProjection)
+{
+	const int i = get_global_id(0), j = get_global_id(1);
+	float2 coord = (float2)((float)i / (float)width, (float)j / (float)height);
+	coord = coord * 2.0f - 1.0f;
+	float4 target = MatMul(inverseProjection, (float4)(coord, 1.0f, 1.0f));
+	target /= target.w;
+	float3 rayDir = normalize(MatMul(inverseView, target).xyz);
+	vstore3(rayDir, i + j * width, rays);
 }
