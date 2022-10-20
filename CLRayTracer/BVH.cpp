@@ -3,6 +3,49 @@
 #include "Math/Vector4.hpp"
 #include "ResourceManager.hpp"
 
+#include <chrono>
+#include <iostream>
+
+#ifndef NDEBUG
+#	define CSTIMER(message) Timer timer = Timer(message);
+#else
+#   define CSTIMER(message) // Timer timer = Timer(message);
+#endif
+
+struct Timer
+{
+	std::chrono::time_point<std::chrono::high_resolution_clock> start_point;
+	bool printMilisecond;
+
+	const char* message;
+
+	Timer(const char* _message) : message(_message), printMilisecond(true)
+	{
+		start_point = std::chrono::high_resolution_clock::now();
+	}
+
+	const double GetTime()
+	{
+		using namespace std::chrono;
+		auto end_point = high_resolution_clock::now();
+		auto start = time_point_cast<microseconds>(start_point).time_since_epoch().count();
+		auto end = time_point_cast<microseconds>(end_point).time_since_epoch().count();
+		printMilisecond = false;
+		return (end - start) * 0.001;
+	}
+
+	~Timer()
+	{
+		using namespace std::chrono;
+		if (!printMilisecond) return;
+		auto end_point = high_resolution_clock::now();
+		auto start = time_point_cast<microseconds>(start_point).time_since_epoch().count();
+		auto end = time_point_cast<microseconds>(end_point).time_since_epoch().count();
+		auto _duration = end - start;
+		std::cout << message << (_duration * 0.001) << "ms" << std::endl;
+	}
+};
+
 // todo use tri.vertx.w as centeroid.x, use simd
 // todo binning again
 
@@ -32,21 +75,31 @@ struct aabb
 static uint rootNodeIdx = 0, nodesUsed = 1;
 static BVHNode* nodes;
 
+FINLINE float GetCenteroid(Tri* tri, int axis)
+{ 
+	return *((&tri->centeroidx) + (axis * 4));
+}
+
 static void UpdateNodeBounds(BVHNode* bvhNode, const Tri* tris, uint nodeIdx)
 {
 	BVHNode* node = bvhNode + nodeIdx;
-	node->aabbMin = float3(1e30f);
-	node->aabbMax = float3(-1e30f);
-	for (uint first = node->leftFirst, i = 0; i < node->triCount; i++)
-	{
-		const Tri* leafTri = tris + first + i;
-		node->aabbMin = fminf(node->aabbMin, leafTri->vertex0);
-		node->aabbMin = fminf(node->aabbMin, leafTri->vertex1);
-		node->aabbMin = fminf(node->aabbMin, leafTri->vertex2);
-		node->aabbMax = fmaxf(node->aabbMax, leafTri->vertex0);
-		node->aabbMax = fmaxf(node->aabbMax, leafTri->vertex1);
-		node->aabbMax = fmaxf(node->aabbMax, leafTri->vertex2);
-	}
+	__m128 nodeMin = _mm_set1_ps(1e30f), nodeMax = _mm_set1_ps(-1e30f);
+    const __m128* leafPtr = (const __m128*)(tris + node->leftFirst);
+    
+    for (uint i = 0; i < node->triCount; i++)
+    {
+    	nodeMin = _mm_min_ps(nodeMin, leafPtr[0]);
+    	nodeMin = _mm_min_ps(nodeMin, leafPtr[1]);
+    	nodeMin = _mm_min_ps(nodeMin, leafPtr[2]);
+    	
+    	nodeMax = _mm_max_ps(nodeMax, leafPtr[0]);
+    	nodeMax = _mm_max_ps(nodeMax, leafPtr[1]);
+    	nodeMax = _mm_max_ps(nodeMax, leafPtr[2]);
+    	leafPtr += 3;
+    }
+    
+    SSEStoreVector3(&node->aabbMin.x, nodeMin);
+    SSEStoreVector3(&node->aabbMax.x, nodeMax);
 }
 
 FINLINE float CalculateCost(const BVHNode* node)
@@ -56,14 +109,14 @@ FINLINE float CalculateCost(const BVHNode* node)
 	return node->triCount * surfaceArea;
 }
 
-static float EvaluateSAH(const BVHNode* node, const Tri* tris, const float3* centeroids, int axis, float pos)
+static float EvaluateSAH(const BVHNode* node, Tri* tris, int axis, float pos)
 {
 	aabb leftBox, rightBox;
 	int leftCount = 0, rightCount = 0;
 	for (int i = 0; i < node->triCount; ++i)
 	{
-		const Tri* triangle = tris + node->leftFirst + i;
-		if (centeroids[node->leftFirst + i][axis] < pos) {
+		Tri* triangle = tris + node->leftFirst + i;
+		if (GetCenteroid(triangle, axis) < pos) {
 			leftCount++;
 			leftBox.grow(triangle);
 		}
@@ -76,7 +129,7 @@ static float EvaluateSAH(const BVHNode* node, const Tri* tris, const float3* cen
 	return cost > 0.0f ? cost : 1e30f;
 }
 
-static float FindBestSplitPlane(const BVHNode* node, const Tri* tris, const float3* centeroids, int* outAxis, float* splitPos)
+static float FindBestSplitPlane(const BVHNode* node, Tri* tris, int* outAxis, float* splitPos)
 {
 	float bestCost = 1e30f;
 
@@ -84,9 +137,9 @@ static float FindBestSplitPlane(const BVHNode* node, const Tri* tris, const floa
 	{
 		for(int i = 0; i < node->triCount; ++i)
 		{
-			const Tri* triangle = tris + node->leftFirst + i;
-			float candidatePos = centeroids[node->leftFirst + i][axis];
-			float cost = EvaluateSAH(node, tris, centeroids, axis, candidatePos);
+			Tri* triangle = tris + node->leftFirst + i;
+			float candidatePos = GetCenteroid(triangle, axis);
+			float cost = EvaluateSAH(node, tris, axis, candidatePos);
 			if (cost < bestCost)
 				*splitPos = candidatePos, *outAxis = axis, bestCost = cost;
 		}	
@@ -94,7 +147,7 @@ static float FindBestSplitPlane(const BVHNode* node, const Tri* tris, const floa
 	return bestCost;
 }
 
-static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, float3* centeroids, uint nodeIdx)
+static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 {
 	// terminate recursion
 	BVHNode* node = bvhNode + nodeIdx;
@@ -120,11 +173,22 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, float3* centeroids, uint n
 	int j = i + node->triCount - 1;
 	while (i <= j)
 	{
-		if (centeroids[i][axis] < splitPos)
+		if (GetCenteroid(tris + i, axis) < splitPos)
 			i++;
 		else {
-			Swap(tris[i], tris[j]);
-			Swap(centeroids[i], centeroids[j--]);
+			// swap elements with simd 2x faster
+			__m128* a = (__m128*)(tris + i);
+			__m128* b = (__m128*)(tris + j);
+
+			__m128 t[3] {*a, a[1], a[2] };
+			a[0] = b[0];
+			a[1] = b[1];
+			a[2] = b[2];
+			
+			b[0] = t[0];
+			b[1] = t[1];
+			b[2] = t[2];
+			j--;
 		}
 	}
 	// abort split if one of the sides is empty
@@ -142,26 +206,33 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, float3* centeroids, uint n
 	UpdateNodeBounds(bvhNode, tris, leftChildIdx);
 	UpdateNodeBounds(bvhNode, tris, rightChildIdx);
 	// recurse
-	SubdivideBVH(bvhNode, tris, centeroids, leftChildIdx);
-	SubdivideBVH(bvhNode, tris, centeroids, rightChildIdx);
+	SubdivideBVH(bvhNode, tris, leftChildIdx);
+	SubdivideBVH(bvhNode, tris, rightChildIdx);
 }
 
-BVHNode* BuildBVH(Tri* tris, int numTriangles, int* _nodesUsed)
+BVHNode* BuildBVH(Tri* tris, int numTriangles, BVHNode* nodes, int* _nodesUsed)
 {
-	float3* centeroids = new float3[numTriangles];
-	// calculate triangle centroids for partitioning
-	for (int i = 0; i < numTriangles; i++)
-		centeroids[i] = (tris[i].vertex0 + tris[i].vertex1 + tris[i].vertex2) * 0.3333f;
+	// 1239.74ms SIMD
+	// 556.51ms  SIMD with custom swap
+	// 6511.79ms withut
+	CSTIMER("BVH build Time: ");
 
-	nodes = new BVHNode[numTriangles * 2ul];
+	// calculate triangle centroids for partitioning
+	for (int i = 0; i < numTriangles; i++) // this loop vectorized by compiler
+	{
+		// set centeroids
+		Tri* tri = tris + i;
+		tri->centeroidx = (tri->vertex0.x + tri->vertex1.x + tri->vertex2.x) * 0.333333f;
+		tri->centeroidy = (tri->vertex0.y + tri->vertex1.y + tri->vertex2.y) * 0.333333f;
+		tri->centeroidz = (tri->vertex0.z + tri->vertex1.z + tri->vertex2.z) * 0.333333f;
+	}
 
 	// assign all triangles to root node
 	BVHNode& root = nodes[rootNodeIdx];
 	root.leftFirst = 0, root.triCount = numTriangles;
 	UpdateNodeBounds(nodes, tris, rootNodeIdx);
 	// subdivide recursively
-	SubdivideBVH(nodes, tris, centeroids, rootNodeIdx);
-	delete[] centeroids;
+	SubdivideBVH(nodes, tris, rootNodeIdx);
 	*_nodesUsed = nodesUsed;
 	return nodes;
 }

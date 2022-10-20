@@ -8,7 +8,7 @@ struct Texture
 	int width, height, offset, padd;
 };
 
-AX_ALIGNED(16) struct BVHNode
+struct BVHNode
 {
 	struct { float3 aabbMin; uint leftFirst; };
 	struct { float3 aabbMax; uint triCount; };
@@ -20,9 +20,9 @@ struct Mesh {
 };
 
 struct Tri { 
-	float3 vertex0; float padd; 
-	float3 vertex1; float padd1; 
-	float3 vertex2; float padd3; 
+	float3 vertex0; float centeroidx; 
+	float3 vertex1; float centeroidy; 
+	float3 vertex2; float centeroidz; 
 };
 
 typedef int TextureHandle;

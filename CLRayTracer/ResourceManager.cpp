@@ -128,14 +128,14 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 	return numMeshes++;
 }
 
-extern BVHNode* BuildBVH(Tri* tris, int numTriangles, int* nodesUsed);
+extern BVHNode* BuildBVH(Tri* tris, int numTriangles, BVHNode* nodes, int* nodesUsed);
 
 void ResourceManager::PushMeshesToGPU(cl_context context)
 {
 	int numTriangles = arenaOffset / sizeof(Tri);
 	Tri* tris = (Tri*)arena;
 	int nodesUsed;
-	BVHNode* nodes = BuildBVH(tris, numTriangles, &nodesUsed);
+	BVHNode* nodes = BuildBVH(tris, numTriangles, (BVHNode*)(arena + arenaOffset), &nodesUsed);
 
 	meshTriangleMem = clCreateBuffer(context, 32, arenaOffset, arena, &clerr); assert(clerr == 0);
 	bvhMem = clCreateBuffer(context, 32, sizeof(BVHNode) * nodesUsed, nodes, &clerr); assert(clerr == 0);
