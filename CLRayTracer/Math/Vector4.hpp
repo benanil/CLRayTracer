@@ -40,8 +40,8 @@ AX_ALIGNED(16) struct Vector4
 	Vector4& VECTORCALL operator *= (const Vector4 b) { vec = _mm_mul_ps(vec, b.vec); return *this; }
 	Vector4& VECTORCALL operator /= (const Vector4 b) { vec = _mm_div_ps(vec, b.vec); return *this; }
 
-	Vector4 operator *  (const float b) const { return _mm_mul_ps(vec, _mm_set_ps1(b)); }
-	Vector4 operator /  (const float b) const { return _mm_div_ps(vec, _mm_set_ps1(b)); }
+	Vector4 operator  *  (const float b) const { return _mm_mul_ps(vec, _mm_set_ps1(b)); }
+	Vector4 operator  /  (const float b) const { return _mm_div_ps(vec, _mm_set_ps1(b)); }
 	Vector4& operator *= (const float b) { vec = _mm_mul_ps(vec, _mm_set_ps1(b)); return *this; }
 	Vector4& operator /= (const float b) { vec = _mm_div_ps(vec, _mm_set_ps1(b)); return *this; }
 };

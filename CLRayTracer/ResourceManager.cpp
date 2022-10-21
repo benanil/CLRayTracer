@@ -43,11 +43,14 @@ namespace ResourceManager
 	cl_mem* GetMeshesMem()       { return &meshMem;       }
 
 	ushort GetNumMeshes() { return numMeshes; };
+
+	void* GetAreaPointer() { return (void*)arena; } // unsafe
+	
+	void SetMeshPosition(MeshHandle handle, float3 point) { meshes[handle].position = point; }
 }
 
-void ResourceManager::Initialize()
+void ResourceManager::PrepareTextures()
 {
-	arena = new unsigned char[CL_MAX_RESOURCE_MEMORY];
 	// create default textures. white, black
 	textures[0].width = 1;  textures[1].width = 1;
 	textures[0].height = 1;  textures[1].height = 1;
@@ -56,6 +59,11 @@ void ResourceManager::Initialize()
 	arena[3] = 0;    arena[4] = 0;    arena[5] = 0;
 
 	arenaOffset = 6; numTextures = 2;
+}
+
+void ResourceManager::Initialize()
+{
+	arena = new unsigned char[CL_MAX_RESOURCE_MEMORY];
 }
 
 TextureHandle ResourceManager::ImportTexture(const char* path)
@@ -94,10 +102,8 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 
 	mesh.numTriangles = meshObj->index_count / 3; 
 	mesh.triangleStart = arenaOffset / sizeof(Tri);
-	
-	int indexCount = meshObj->index_count;
 
-	if (arenaOffset + meshObj->position_count > CL_MAX_RESOURCE_MEMORY)
+	if (arenaOffset + (mesh.numTriangles * sizeof(Tri)) > CL_MAX_RESOURCE_MEMORY)
 	{
 		AXERROR("mesh importing failed! CL_MAX_RESOURCE_MEMORY is not enough!"); assert(0);
 		exit(0); return 0;
@@ -106,13 +112,12 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 	Tri* tris = (Tri*)(arena + arenaOffset);
 
 	fastObjIndex* meshIdx = meshObj->indices;
-
+	// todo use simd here
 	for (int i = 0; i < mesh.numTriangles; ++i)
 	{
 		float* posPtr = meshObj->positions + (meshIdx->p * 3);
 		tris->vertex0 = float3(posPtr[0], posPtr[1], posPtr[2]);
 		meshIdx++;
-
 		posPtr = meshObj->positions + (meshIdx->p * 3);
 		tris->vertex1 = float3(posPtr[0], posPtr[1], posPtr[2]);
 		meshIdx++;	
@@ -122,20 +127,31 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 		meshIdx++; tris++;
 	}
 
+	// todo add material indexes to vertices
+
 	arenaOffset += mesh.numTriangles * sizeof(Tri);
 
 	fast_obj_destroy(meshObj);
 	return numMeshes++;
 }
 
-extern BVHNode* BuildBVH(Tri* tris, int numTriangles, BVHNode* nodes, int* nodesUsed);
+extern BVHNode* BuildBVH(Tri* tris, Mesh* meshes, int numMeshes, BVHNode* nodes, int* nodesUsed);
 
 void ResourceManager::PushMeshesToGPU(cl_context context)
 {
-	int numTriangles = arenaOffset / sizeof(Tri);
 	Tri* tris = (Tri*)arena;
 	int nodesUsed;
-	BVHNode* nodes = BuildBVH(tris, numTriangles, (BVHNode*)(arena + arenaOffset), &nodesUsed);
+	BVHNode* nodes = BuildBVH(tris, meshes, numMeshes, (BVHNode*)(arena + arenaOffset), &nodesUsed);
+
+	// after bvh we dont need these centeroid data, so we evaluate it
+	for (uint i = 0; i < numMeshes; ++i) {
+		Mesh* mesh = meshes + i;
+		uint triStart = mesh->triangleStart;
+		for (int j = 0; j < mesh->numTriangles; ++j) {
+			// set w's to 0 because we will use these data for material indexing
+			tris[triStart + j].centeroidx = *(float*)(&i); 
+		}
+	}
 
 	meshTriangleMem = clCreateBuffer(context, 32, arenaOffset, arena, &clerr); assert(clerr == 0);
 	bvhMem = clCreateBuffer(context, 32, sizeof(BVHNode) * nodesUsed, nodes, &clerr); assert(clerr == 0);

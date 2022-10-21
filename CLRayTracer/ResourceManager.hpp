@@ -16,8 +16,24 @@ struct BVHNode
 };
 
 struct Mesh {
-	int triangleStart, numTriangles;
+	uint bvhIndex, numTriangles, triangleStart, padd;
+	float3 position; float padd1;
 };
+
+struct Material {
+	uint color, textureIndex;
+	float roughness, padd1;
+};
+
+#pragma pack(1)
+typedef struct Sphere_t
+{
+	float position[3];
+	float radius;
+	float roughness;
+	unsigned color;
+	float rotationx, rotationy;
+} Sphere;
 
 struct Tri { 
 	float3 vertex0; float centeroidx; 
@@ -25,17 +41,27 @@ struct Tri {
 	float3 vertex2; float centeroidz; 
 };
 
-typedef int TextureHandle;
-typedef int MeshHandle;
+typedef uint TextureHandle;
+typedef uint MeshHandle;
 
 namespace ResourceManager
 {
 	TextureHandle ImportTexture(const char* path);
 	MeshHandle ImportMesh(const char* path);
 
-	inline TextureHandle GetWhiteTexture() { return 0; }
-	inline TextureHandle GetBlackTexture() { return 1; }
+	inline constexpr TextureHandle GetWhiteTexture() { return 0; }
+	inline constexpr TextureHandle GetBlackTexture() { return 1; }
+	inline constexpr Material DefaultMaterial() {
+		Material material;
+		material.color = ~0;// white
+		material.roughness = 0.5f;
+		material.textureIndex = 0;// white texture
+		return material;
+	}
 	
+	void SetMeshPosition(MeshHandle handle, float3 point);
+
+	void PrepareTextures();
 	cl_mem* GetTextureHandleMem();
 	cl_mem* GetTextureDataMem();
 	cl_mem* GetMeshTriangleMem();
@@ -50,5 +76,6 @@ namespace ResourceManager
 	void Destroy();
 
 	void PushTexturesToGPU(cl_context context);
+	void* GetAreaPointer(); // unsafe
 }
 

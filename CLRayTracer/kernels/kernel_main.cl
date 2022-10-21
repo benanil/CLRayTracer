@@ -6,7 +6,8 @@
 
 typedef struct _TraceArgs{
 	float cameraPos[3];
-	ushort numSpheres, numMeshes;
+	float time;
+	uint numSpheres, numMeshes, padd;
 } TraceArgs;
 
 typedef struct _RayHit {
@@ -15,27 +16,36 @@ typedef struct _RayHit {
 	int    index;
 } RayHit;
 
-typedef struct __attribute__((packed)) _Sphere {
+typedef struct _Sphere {
 	float position[3]; 
 	float radius;
 	float roughness;
 	uint  color; // w texture index
+	float rotationx, rotationy;
 } Sphere;
 
 typedef struct _HitRecord {
 	float3 color, normal, point;
 } HitRecord;
 
-typedef struct __attribute((packed)) _Triangle {
-	float3 x, y, z;
+typedef struct _Material {
+	uint color, textureIndex;
+	float roughness, padd1;
+} Material;
+
+typedef struct _Triangle {
+	float4 x; // w is material Index
+	float3 y, z;
 } Triangle;
 
 typedef struct _Triout {
 	float t, u, v; uint triIndex;
 } Triout;
 
+// this structure consist of multiple sub meshes 
 typedef struct _Mesh {
-	int triangleStart, numTriangles;
+	uint bvhIndex, padd, padd1, padd2;
+	float3 position;
 } Mesh;
 
 typedef struct _BVHNode {
@@ -48,8 +58,8 @@ typedef struct _BVHNode {
 // ---- CONSTRUCTORS ----
 
 RayHit CreateRayHit() {
-    RayHit hit; hit.distance = Infinite; hit.index = 0;
-    return hit;
+	RayHit hit; hit.distance = Infinite; hit.index = 0;
+	return hit;
 }
 
 HitRecord CreateHitRecord() {
@@ -86,32 +96,32 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
 {
 	return false;
 	float t = -ray.origin.y / ray.direction.y;
-    if (t > 0 && t < besthit->distance) 
+	if (t > 0 && t < besthit->distance) 
 	{
 		float3 point = ray.origin + (ray.direction * t);
-    	if (fabs(point.x) < 15.0f && fabs(point.z) < 15.0f)
+		if (fabs(point.x) < 15.0f && fabs(point.z) < 15.0f)
 			besthit->distance = t;
-    	return true;
+		return true;
 	}
 	return false;
 }
 
 bool IntersectTriangle(Ray ray, Triangle tri, Triout* o, int i)
 {
-    const float3 edge1 = tri.y - tri.x;
-    const float3 edge2 = tri.z - tri.x;
-    const float3 h = cross( ray.direction, edge2 );
-    const float a = dot( edge1, h );
-    //if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
-    const float f = 1.0f / a;
-    const float3 s = ray.origin - tri.x;
-    const float u = f * dot( s, h );
-    if (u < 0.0f || u > 1.0f) return false;
-    const float3 q = cross( s, edge1 );
-    const float v = f * dot( ray.direction, q );
-    if (v < 0.0f || u + v > 1.0f) return false;
-    const float t = f * dot( edge2, q );
-    if (t > 0.0001f && t < o->t) {
+	const float3 edge1 = tri.y - tri.x.xyz;
+	const float3 edge2 = tri.z - tri.x.xyz;
+	const float3 h = cross( ray.direction, edge2 );
+	const float a = dot( edge1, h );
+	//if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
+	const float f = 1.0f / a;
+	const float3 s = ray.origin - tri.x.xyz;
+	const float u = f * dot( s, h );
+	if (u < 0.0f || u > 1.0f) return false;
+	const float3 q = cross( s, edge1 );
+	const float v = f * dot( ray.direction, q );
+	if (v < 0.0f || u + v > 1.0f) return false;
+	const float t = f * dot( edge2, q );
+	if (t > 0.0001f && t < o->t) {
 		o->u = u; o->v = v; o->t = t;
 		o->triIndex = i;
 		return true;
@@ -133,66 +143,40 @@ float IntersectAABB(float3 origin, float3 invDir, float3 aabbMin, float3 aabbMax
 #define SWAPF(x, y) float tf = x; x = y, y = tf;
 #define SWAPUINT(x, y) uint tu = x; x = y, y = tu;
 
-int IntersectBVH(Ray ray, const global BVHNode* nodes, const global Triangle* tris, Triout* out)
+int IntersectBVH(Ray ray, const global BVHNode* nodes, uint rootNode, const global Triangle* tris, Triout* out)
 {
-	// int nodesToVisit[48] = { 0 };
-	// int currentNodeIndex = 1;
-	// float3 invDir = (float3)(1.0f) / ray.direction;
-	// int intersection = 0;
-	// 
-	// while (currentNodeIndex > 0)
-	// {
-	// 	const global BVHNode* node = &nodes[nodesToVisit[--currentNodeIndex]];
-	// 	
-	// 	if (!IntersectAABB(ray.origin, invDir, node->min.xyz, node->max.xyz, out->t)) continue;
-	// 
-	// 	if (GetTriCount(node) > 0) // is leaf 
-	// 	{
-	// 		for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
-	// 		{
-	// 			intersection |= IntersectTriangle(ray, tris[i], out, i);
-	// 		}
-	// 	}
-	// 	else {
-	// 		uint leftNode = GetLeftFirst(node);
-	// 		nodesToVisit[currentNodeIndex++] = leftNode;
-	// 		nodesToVisit[currentNodeIndex++] = leftNode + 1;
-	// 	}
-	// }
-	// return intersection;
-	int nodesToVisit[48] = { 0 };
+	int nodesToVisit[32] = { rootNode };
 	int currentNodeIndex = 1;
 	float3 invDir = (float3)(1.0f) / ray.direction;
-	int intersection = 0;
+	int intersection = 0, protection = 0;
 	
-	while (currentNodeIndex > 0)
+	while (currentNodeIndex > 0 && protection++ < 250)
 	{	
 		const global BVHNode* node = nodes + nodesToVisit[--currentNodeIndex];
 		traverse:
-		if (GetTriCount(node) > 0) // is leaf 
-		{
-			for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
-				intersection |= IntersectTriangle(ray, tris[i], out, i);
-			continue;
-		}
+			if (GetTriCount(node) > 0) // is leaf 
+			{
+				for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
+					intersection |= IntersectTriangle(ray, tris[i], out, i);
+				continue;
+			}
 	
-		uint leftIndex  = GetLeftFirst(node);
-		uint rightIndex = leftIndex + 1;
-		BVHNode leftNode  = nodes[leftIndex];
-		BVHNode rightNode = nodes[rightIndex];
+			uint leftIndex  = GetLeftFirst(node);
+			uint rightIndex = leftIndex + 1;
+			BVHNode leftNode  = nodes[leftIndex];
+			BVHNode rightNode = nodes[rightIndex];
 		
-		float dist1 = IntersectAABB(ray.origin, invDir, leftNode.min.xyz , leftNode.max.xyz , out->t);
-		float dist2 = IntersectAABB(ray.origin, invDir, rightNode.min.xyz, rightNode.max.xyz, out->t);
+			float dist1 = IntersectAABB(ray.origin, invDir, leftNode.min.xyz , leftNode.max.xyz , out->t);
+			float dist2 = IntersectAABB(ray.origin, invDir, rightNode.min.xyz, rightNode.max.xyz, out->t);
 	
-		if (dist1 > dist2) { SWAPF(dist1, dist2); SWAPUINT(leftIndex, rightIndex); }
+			if (dist1 > dist2) { SWAPF(dist1, dist2); SWAPUINT(leftIndex, rightIndex); }
 		
-		if (dist1 == 1e30f) continue;
-		else
-		{
-			node = nodes + leftIndex;
-			if (dist2 != 1e30f) nodesToVisit[currentNodeIndex++] = rightIndex;
-			goto traverse;
-		}
+			if (dist1 == 1e30f) continue;
+			else {
+				node = nodes + leftIndex;
+				if (dist2 != 1e30f) nodesToVisit[currentNodeIndex++] = rightIndex;
+				goto traverse;
+			}
 	}
 	return intersection;
 }
@@ -208,11 +192,11 @@ kernel void Trace (
 	global const float* rays, 
 	global const Sphere* spheres,
 	TraceArgs trace_args,
-	global const BVHNode* nodes
+	global const BVHNode* nodes,
+	global const Material* materials
 ) 
 {
 	const int i = get_global_id(0), j = get_global_id(1);
-	constant float oneDivGamma = 1.0f / 1.2f;
 	
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
 	
@@ -220,7 +204,6 @@ kernel void Trace (
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
 	float atmosphericLight = 0.2f;
-	
 	for (int j = 0; j < 1; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
@@ -248,21 +231,35 @@ kernel void Trace (
 			roughness = currentSphere.roughness;
 		}
 
-		Triout triout;
-		triout.t = besthit.distance; triout.triIndex = 0;
-		
-		if (IntersectBVH(ray, nodes, triangles, &triout)) 
-		{
-			Triangle triangle = triangles[triout.triIndex];
-			record.point = ray.origin + triout.t * ray.direction;
-			record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x)); // maybe precalculate
-			record.color = (float3)(0.8f, 0.8f,0.8f);
-			besthit.distance = triout.t;	
-		}
+		Ray meshRay;
+		meshRay.direction = ray.direction;
 
+		for (int i = 0; i < trace_args.numMeshes; ++i)
+		{
+			Triout triout;
+			triout.t = besthit.distance;
+			triout.triIndex = 0;
+			Mesh mesh = meshes[i];
+			// change ray position instead of mesh position for capturing in different positions
+			meshRay.origin = ray.origin - mesh.position;
+
+			if (IntersectBVH(meshRay, nodes, mesh.bvhIndex, triangles, &triout)) 
+			{
+				Triangle triangle = triangles[triout.triIndex];
+				record.point = meshRay.origin + triout.t * meshRay.direction;
+				record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x.xyz)); // maybe precalculate
+				Material material = materials[as_uint(triangle.x.w)];
+
+				RGB8 pixel = texturePixels[SampleTexture(textures[material.textureIndex], triout.u, triout.v)];
+				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
+				besthit.distance = triout.t;	
+				roughness = material.roughness;
+			}
+		}
+		
 		if (besthit.distance > InfMinusOne) 
 		{
- 			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
+			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
 			float3 skybox_sample = UNPACK_RGB8(pixel);			
 			result += skybox_sample * energy;
 			break;

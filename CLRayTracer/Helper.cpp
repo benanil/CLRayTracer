@@ -2,6 +2,7 @@
 #include <fstream>
 #include <filesystem>
 #include "Logger.hpp"
+#include "ResourceManager.hpp"
 
 static void SkipBOM(std::ifstream& in)
 {
@@ -50,7 +51,7 @@ char* Helper::ReadCombineKernels()
 	const uintmax_t msz = std::filesystem::file_size("kernels/MathAndSTL.cl");
 	const uintmax_t sz  = std::filesystem::file_size("kernels/kernel_main.cl");
 
-	char* code = new char[sz + msz +1];
+	char* code = (char*)ResourceManager::GetAreaPointer();
 	fm.read(code, msz);
 	f.read(code + msz, sz);
 

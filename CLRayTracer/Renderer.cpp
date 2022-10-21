@@ -44,7 +44,7 @@ void main()\
 	cl_command_queue command_queue;
 	cl_program program;
 
-	cl_mem clglScreen, rayMem, sphereMem, vertexMem, indexMem;
+	cl_mem clglScreen, rayMem, sphereMem, vertexMem, materialMem;
 	constexpr int numSpheres = 5;
 	Sphere spheres[numSpheres];
 
@@ -155,13 +155,15 @@ int Renderer::Initialize()
 	context = clCreateContext(properties, 1, &device_id, NULL, NULL, &clerr);
 	// create command queue using the context and device
 	command_queue = clCreateCommandQueueWithProperties(context, device_id, nullptr, &clerr);
+
+	ResourceManager::Initialize();
 	
-	char* kernelCode = Helper::ReadCombineKernels();
+	// no need to delete this kernel code memory allocated from arena allocator
+	char* kernelCode = Helper::ReadCombineKernels(); 
 	if (!kernelCode) { return 0; }
 	
 	program = clCreateProgramWithSource(context, 1, (const char**)&kernelCode, NULL, &clerr); assert(clerr == 0);
 	
-	delete[] kernelCode;
 	// compile the program
 	if (clBuildProgram(program, 0, NULL, "-Werror -cl-single-precision-constant -cl-mad-enable", NULL, NULL) != CL_SUCCESS)
 	{
@@ -175,7 +177,7 @@ int Renderer::Initialize()
 		return 0;
 	}
 
-	ResourceManager::Initialize();
+	ResourceManager::PrepareTextures();
 
 	char skyTexture     = ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	char sunTexture     = ResourceManager::ImportTexture("Assets/2k_sun.jpg");
@@ -183,12 +185,31 @@ int Renderer::Initialize()
 	char moonTexture    = ResourceManager::ImportTexture("Assets/2k_moon.jpg");
 	char marsTexture    = ResourceManager::ImportTexture("Assets/2k_mars.jpg");
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
+	char boxTexture     = ResourceManager::ImportTexture("Assets/box.jpg");
 
 	ResourceManager::PushTexturesToGPU(context);
 	
 	ResourceManager::PrepareMeshes();
-		ResourceManager::ImportMesh("Assets/dragon.obj");
+		MeshHandle bunnyMesh = ResourceManager::ImportMesh("Assets/bunny.obj");
+		MeshHandle cubeMesh  = ResourceManager::ImportMesh("Assets/cube.obj");
+		
+		ResourceManager::SetMeshPosition(cubeMesh, float3(2.0f, 5.0f, -2.0f));
+
 	ResourceManager::PushMeshesToGPU(context);
+
+	constexpr int numMaterials = 2;
+	Material materials[numMaterials];
+	{
+		Material* firstMaterial = materials + 0;
+		firstMaterial->color = 0x00FF00FFu;
+		firstMaterial->roughness = 0.5f;
+		firstMaterial->textureIndex = 0u;
+
+		Material* boxMaterial = materials + 1;
+		boxMaterial->color = ~0u;
+		boxMaterial->roughness = 0.5f;
+		boxMaterial->textureIndex = boxTexture;
+	}
 
 	Random::PCG pcg{};
 	// create random sphere positions&colors
@@ -207,7 +228,8 @@ int Renderer::Initialize()
 
 	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
 
-	sphereMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
+	sphereMem   = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
+	materialMem = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, sizeof(Material) * numMaterials, materials, &clerr); assert(clerr == 0);
 
 	return 1;
 }
@@ -243,12 +265,14 @@ void Renderer::Render()
 
 	struct TraceArgs {
 		Vector3f cameraPosition;
-		ushort numSpheres, numMeshes;
+		float time;
+		uint numSpheres, numMeshes, padd;
 	} trace_args;
 
 	trace_args.cameraPosition = camera.position;
 	trace_args.numSpheres = numSpheres;
 	trace_args.numMeshes = ResourceManager::GetNumMeshes();
+	trace_args.time = time;
 
 	cl_int clerr; cl_event event;
 
@@ -270,8 +294,9 @@ void Renderer::Render()
 	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshTriangleMem() ); assert(clerr == 0);
 	clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
 	clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args);  assert(clerr == 0);
 	clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), ResourceManager::GetBVHMem()); assert(clerr == 0);
+	clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &materialMem); assert(clerr == 0);
 
 	// execute rendering
 	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
@@ -294,6 +319,7 @@ void Renderer::Terminate()
 	clReleaseMemObject(clglScreen);
 	clReleaseMemObject(rayMem);
 	clReleaseMemObject(sphereMem);
+	clReleaseMemObject(materialMem);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(command_queue);
 	clReleaseKernel(traceKernel);

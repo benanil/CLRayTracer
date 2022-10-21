@@ -31,12 +31,12 @@ float Min3(float3 a) { return fmin(fmin(a.x, a.y), a.z); }
 
 float3x3 GetTangentSpace(float3 normal)
 {
-    // Choose a helper vector for the cross product
-    float3 helper = (float3)(1.0f, 0.0f, 0.0f);
-    if (fabs(normal.x) > 0.99f) helper = (float3)(0.0f, 0.0f, 1.0f);
-    // Generate vectors
-    float3 tangent  = normalize(cross(normal, helper));
-    float3 binormal = normalize(cross(normal, tangent));
+	// Choose a helper vector for the cross product
+	float3 helper = (float3)(1.0f, 0.0f, 0.0f);
+	if (fabs(normal.x) > 0.99f) helper = (float3)(0.0f, 0.0f, 1.0f);
+	// Generate vectors
+	float3 tangent  = normalize(cross(normal, helper));
+	float3 binormal = normalize(cross(normal, tangent));
 	float3x3 mat;
 	mat.x = tangent; mat.y = binormal; mat.z = normal;
 	return mat;
@@ -47,6 +47,8 @@ float3x3 GetTangentSpace(float3 normal)
 constant float Infinite = 99999.0f;
 constant float InfMinusOne = 99998.0f;
 constant float UcharToFloat01 = 1.0f / 255.0f;
+constant float oneDivGamma = 1.0f / 1.2f;
+constant float c_FMul = (1.0 / 16777216.0f);
 
 float3 UnpackRGB8u(uint u)  
 {
@@ -73,27 +75,26 @@ unsigned Next(uint* rng) {
 }
 
 float NextFloat01(uint* state) {
-	constant float c_FMul = (1.0 / 16777216.0f);
 	return as_float(Next(state) >> 8) * c_FMul;
 }
 
 float3 HemisphereSample(uint* random, float3 normal)
 {
 	float cosTheta = NextFloat01(random); 
-    float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
-    float phi = 2.0f * M_PI_F * NextFloat01(random);
-    float3 tangentSpaceDir = (float3)(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-    return Mat3Mul(GetTangentSpace(normal), tangentSpaceDir);
+	float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+	float phi = 2.0f * M_PI_F * NextFloat01(random);
+	float3 tangentSpaceDir = (float3)(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+	return Mat3Mul(GetTangentSpace(normal), tangentSpaceDir);
 }
 
 // ---- CONSTRUCTORS ----
 
 Ray CreateRay(float3 origin, float3 dir)
 {
-    Ray ray;
-    ray.origin = origin;
-    ray.direction = dir;
-    return ray;
+	Ray ray;
+	ray.origin = origin;
+	ray.direction = dir;
+	return ray;
 }
 
 // ---- TEXTURE ----
@@ -122,5 +123,29 @@ int SampleSphereTexture(float3 position, float3 center, Texture texture)
 	return mad24(phi, texture.width, theta + texture.offset);
 }
 
+int SampleRotatedSphereTexture(float3 position, float3 center, float rotationx, float rotationy, Texture texture)
+{
+	float3 direction = fast_normalize(position - center);
+
+	float cosTheta = rotationx; 
+	float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+	float phi = 2.0f * M_PI_F * rotationy;
+
+	float3 tangentSpaceDir = (float3)(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+	
+	direction = Mat3Mul(GetTangentSpace(direction), tangentSpaceDir);
+	
+	int theta = (int)(atan2pi(direction.x, direction.z) * .5f * (float)(texture.width)); 
+	phi   = (int)(acospi(direction.y) * (float)(texture.height)); 
+	
+	return mad24(phi, texture.width, theta + texture.offset);
+}
+
 #define SAMPLE_SPHERE_TEXTURE(pos, center, texture) texturePixels[SampleSphereTexture(pos, center, texture)]
 
+int SampleTexture(Texture texture, float u, float v)
+{
+	int uScaled = clamp((int)(texture.width  * u), 0, texture.width ); // (0, 1) to (0, TextureWidth )
+	int vScaled = clamp((int)(texture.height * v), 0, texture.height); // (0, 1) to (0, TextureHeight)
+	return vScaled * texture.width + texture.offset + uScaled;
+}

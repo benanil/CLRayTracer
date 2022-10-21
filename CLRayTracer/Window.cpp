@@ -15,7 +15,10 @@ namespace Window
 
 	double dt;
 	
-	void EndFrame() { glfwSwapInterval(1); glfwSwapBuffers(window); }
+	void EndFrame() {
+		glfwSwapInterval(1); 
+		glfwSwapBuffers(window); 
+	}
 
 	bool IsFocused() { return Focused; }
 
@@ -92,6 +95,8 @@ namespace Window
 	}
 }
 
+typedef BOOL(WINAPI* PFNWGLSWAPINTERVALEXTPROC)(int interval);
+
 int Window::Create()
 {
 	// Init GLFW
@@ -100,15 +105,24 @@ int Window::Create()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
+	glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 	// Create a GLFWwindow object that we can use for GLFW's functions
 	window = glfwCreateWindow(Width, Height, "CLRayTracer", nullptr, nullptr);
 	if (!window) return 0;
+
 	glfwMakeContextCurrent(window);
 	// Set the required callback functions
 	glfwSetKeyCallback(window, Window::KeyCallback);
 	glfwSetWindowSizeCallback(window, Window::WindowCallback);
 	glfwSetWindowFocusCallback(window, Window::FocusCallback);
+
+#ifdef _WIN32
+	// Turn on vertical screen sync under Windows.
+	// (I.e. it uses the WGL_EXT_swap_control extension)
+	PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = NULL;
+	wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
+	if (wglSwapIntervalEXT) wglSwapIntervalEXT(1);
+#endif
 
 	const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	monitorScale.x = vidMode->width;
