@@ -35,11 +35,20 @@ typedef struct Sphere_t
 	float rotationx, rotationy;
 } Sphere;
 
-struct Tri { 
+#pragma pack(1)
+
+AX_ALIGNED(16) struct Tri { 
 	float3 vertex0; float centeroidx; 
 	float3 vertex1; float centeroidy; 
 	float3 vertex2; float centeroidz; 
+
+	half uv0x, uv0y;
+	half uv1x, uv1y;
+	half uv2x, uv2y;
+	int padd;
 };
+
+static_assert(sizeof(Tri) == 64);
 
 typedef uint TextureHandle;
 typedef uint MeshHandle;

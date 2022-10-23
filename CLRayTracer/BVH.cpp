@@ -38,7 +38,7 @@ struct Bin {
 	aabb bounds; uint triCount = 0;
 };
 
-static uint nodesUsed = 1;
+static uint nodesUsed = 0;
 static BVHNode* nodes;
 
 #define GetCenteroid(tri, axis) *((&(tri)->centeroidx) + (axis * 4))
@@ -58,7 +58,7 @@ static void UpdateNodeBounds(BVHNode* bvhNode, const Tri* tris, uint nodeIdx)
     	nodeMax = _mm_max_ps(nodeMax, leafPtr[0]);
     	nodeMax = _mm_max_ps(nodeMax, leafPtr[1]);
     	nodeMax = _mm_max_ps(nodeMax, leafPtr[2]);
-    	leafPtr += 3;
+    	leafPtr += 4; // +3 for vertex + 1 for texcoords
     }
     
     SSEStoreVector3(&node->aabbMin.x, nodeMin);
@@ -187,14 +187,16 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 			__m128* a = (__m128*)(tris + i);
 			__m128* b = (__m128*)(tris + j);
 
-			__m128 t[3] { *a, a[1], a[2] };
+			__m128 t[4] { *a, a[1], a[2], a[3] };
 			a[0] = b[0];
 			a[1] = b[1];
 			a[2] = b[2];
-			
+			a[3] = b[3];
+
 			b[0] = t[0];
 			b[1] = t[1];
 			b[2] = t[2];
+			b[3] = t[3];
 			j--;
 		}
 	}
@@ -240,8 +242,7 @@ BVHNode* BuildBVH(Tri* tris, Mesh* meshes, int numMeshes, BVHNode* nodes, int* _
 	uint currTriangle = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		// assign all triangles to root node
-		uint rootNodeIndex = 0;
-		if (nodesUsed > 1) rootNodeIndex = nodesUsed++;
+		uint rootNodeIndex = nodesUsed++;
 
 		meshes[i].bvhIndex = rootNodeIndex;
 		

@@ -185,13 +185,13 @@ int Renderer::Initialize()
 	char moonTexture    = ResourceManager::ImportTexture("Assets/2k_moon.jpg");
 	char marsTexture    = ResourceManager::ImportTexture("Assets/2k_mars.jpg");
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	char boxTexture     = ResourceManager::ImportTexture("Assets/box.jpg");
+	char boxTexture     = ResourceManager::ImportTexture("Assets/textures/M24R_C.jpg");
 
 	ResourceManager::PushTexturesToGPU(context);
 	
 	ResourceManager::PrepareMeshes();
 		MeshHandle bunnyMesh = ResourceManager::ImportMesh("Assets/bunny.obj");
-		MeshHandle cubeMesh  = ResourceManager::ImportMesh("Assets/cube.obj");
+		MeshHandle cubeMesh  = ResourceManager::ImportMesh("Assets/M24_R_Low_Poly_Version_obj.obj");
 		
 		ResourceManager::SetMeshPosition(cubeMesh, float3(2.0f, 5.0f, -2.0f));
 
@@ -201,7 +201,7 @@ int Renderer::Initialize()
 	Material materials[numMaterials];
 	{
 		Material* firstMaterial = materials + 0;
-		firstMaterial->color = 0x00FF00FFu;
+		firstMaterial->color = 0x00FF0000u | (80 << 16) | (55);
 		firstMaterial->roughness = 0.5f;
 		firstMaterial->textureIndex = 0u;
 
@@ -253,59 +253,61 @@ void Renderer::OnWindowResize(int width, int height)
 
 void Renderer::Render()
 {
-	if (!Window::IsFocused()) return;
-
-	// glClear(GL_COLOR_BUFFER_BIT);
-
-	Vector2i windowSize = Window::GetWindowScale();
-	size_t globalWorkSize[2] = { windowSize.x, windowSize.y };
+	camera.Update();
 	float time = Window::GetTime();
 
-	camera.Update();
+	if (Window::IsFocused() && camera.wasPressing) 
+	{
+		// glClear(GL_COLOR_BUFFER_BIT);
 
-	struct TraceArgs {
-		Vector3f cameraPosition;
-		float time;
-		uint numSpheres, numMeshes, padd;
-	} trace_args;
+		Vector2i windowSize = Window::GetWindowScale();
+		size_t globalWorkSize[2] = { windowSize.x, windowSize.y };
 
-	trace_args.cameraPosition = camera.position;
-	trace_args.numSpheres = numSpheres;
-	trace_args.numMeshes = ResourceManager::GetNumMeshes();
-	trace_args.time = time;
+		struct TraceArgs {
+			Vector3f cameraPosition;
+			float time;
+			uint numSpheres, numMeshes, padd;
+		} trace_args;
 
-	cl_int clerr; cl_event event;
+		trace_args.cameraPosition = camera.position;
+		trace_args.numSpheres = numSpheres;
+		trace_args.numMeshes = ResourceManager::GetNumMeshes();
+		trace_args.time = time;
 
-	// prepare ray generation kernel
-	clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &windowSize.x);                 assert(clerr == 0);
-	clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &windowSize.y);                 assert(clerr == 0);
-	clerr = clSetKernelArg(rayGenKernel, 2, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
-	clerr = clSetKernelArg(rayGenKernel, 3, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
-	clerr = clSetKernelArg(rayGenKernel, 4, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
-	// execute ray generation
-	clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
-	// prepare Rendering
-	clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
+		cl_int clerr; cl_event event;
+
+		// prepare ray generation kernel
+		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &windowSize.x);                 assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &windowSize.y);                 assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 2, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 3, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 4, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
+		// execute ray generation
+		clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
+		// prepare Rendering
+		clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
 	
-	clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen);    assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()  ); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), ResourceManager::GetMeshesMem()       ); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshTriangleMem() ); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args);  assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), ResourceManager::GetBVHMem()); assert(clerr == 0);
-	clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &materialMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen);    assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()  ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), ResourceManager::GetMeshesMem()       ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshTriangleMem() ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args);  assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), ResourceManager::GetBVHMem()); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &materialMem); assert(clerr == 0);
 
-	// execute rendering
-	clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
-	clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
+		// execute rendering
+		clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
+		clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
 
-	clFinish(command_queue);
-
+		clFinish(command_queue);
+	}
 	glDrawArrays(GL_TRIANGLES, 0, 3);
-	Window::ChangeName((Window::GetTime() - time) * 1000.0);
+	double ms = (Window::GetTime() - time) * 1000.0;
+	Window::ChangeName(ms);
+	if (time > 5.0f && ms > 60) { AXERROR("GPU Botleneck! %f ms", ms); exit(0); }
 }
 
 void Renderer::Terminate()

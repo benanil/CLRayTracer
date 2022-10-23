@@ -74,8 +74,12 @@ namespace Window
 	void ChangeName(float ms) 
 	{
 		char str[28];
-		sprintf(str, "CLRenderer ms: %.3f", ms);
-		glfwSetWindowTitle(window, str);
+		if (ms < 0.1f)
+			glfwSetWindowTitle(window, "Super Fast > 1000fps");
+		else {
+			sprintf(str, "CLRenderer ms: %.3f", ms);
+			glfwSetWindowTitle(window, str);
+		}
 	}
 
 	void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode)

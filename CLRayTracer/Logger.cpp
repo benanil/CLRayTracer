@@ -54,7 +54,7 @@ void Logger::FileLog(const char* filename, const char* outputDir, int line, cons
 
 void Logger::Log(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
+	//	std::lock_guard<std::mutex> lock(logMutex);
 	
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	
@@ -63,8 +63,7 @@ void Logger::Log(const char* filename, int line, const char* format, ...)
 	std::strftime(buf, sizeof(buf), "%I:%M:%S", std::localtime(&now));
 	printf("[%s] ", buf);
 	
-	if (showFileName) printf("Log: %s:%d ", GetFileName(filename), line);
-	else			  printf("Log: ");
+	printf("Log: %s:%d ", GetFileName(filename), line);
 
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 0x0F);
 

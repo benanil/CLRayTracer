@@ -36,6 +36,8 @@ typedef struct _Material {
 typedef struct _Triangle {
 	float4 x; // w is material Index
 	float3 y, z;
+	half2 uv0, uv1, uv2;
+	int pad;
 } Triangle;
 
 typedef struct _Triout {
@@ -106,15 +108,15 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
 	return false;
 }
 
-bool IntersectTriangle(Ray ray, Triangle tri, Triout* o, int i)
+bool IntersectTriangle(Ray ray, const global Triangle* tri, Triout* o, int i)
 {
-	const float3 edge1 = tri.y - tri.x.xyz;
-	const float3 edge2 = tri.z - tri.x.xyz;
+	const float3 edge1 = tri->y - tri->x.xyz;
+	const float3 edge2 = tri->z - tri->x.xyz;
 	const float3 h = cross( ray.direction, edge2 );
 	const float a = dot( edge1, h );
-	//if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
+	// if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
 	const float f = 1.0f / a;
-	const float3 s = ray.origin - tri.x.xyz;
+	const float3 s = ray.origin - tri->x.xyz;
 	const float u = f * dot( s, h );
 	if (u < 0.0f || u > 1.0f) return false;
 	const float3 q = cross( s, edge1 );
@@ -122,7 +124,7 @@ bool IntersectTriangle(Ray ray, Triangle tri, Triout* o, int i)
 	if (v < 0.0f || u + v > 1.0f) return false;
 	const float t = f * dot( edge2, q );
 	if (t > 0.0001f && t < o->t) {
-		o->u = u; o->v = v; o->t = t;
+		o->u = u;  o->v = v; o->t = t;
 		o->triIndex = i;
 		return true;
 	}
@@ -154,36 +156,36 @@ int IntersectBVH(Ray ray, const global BVHNode* nodes, uint rootNode, const glob
 	{	
 		const global BVHNode* node = nodes + nodesToVisit[--currentNodeIndex];
 		traverse:
-			if (GetTriCount(node) > 0) // is leaf 
-			{
-				for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
-					intersection |= IntersectTriangle(ray, tris[i], out, i);
-				continue;
-			}
-	
-			uint leftIndex  = GetLeftFirst(node);
-			uint rightIndex = leftIndex + 1;
-			BVHNode leftNode  = nodes[leftIndex];
-			BVHNode rightNode = nodes[rightIndex];
+		if (GetTriCount(node) > 0) // is leaf 
+		{
+			for (int i = GetLeftFirst(node), end = i + GetTriCount(node); i < end; ++i)
+				intersection |= IntersectTriangle(ray, tris + i, out, i);
+			continue;
+		}
+	    
+		uint leftIndex  = GetLeftFirst(node);
+		uint rightIndex = leftIndex + 1;
+		BVHNode leftNode  = nodes[leftIndex];
+		BVHNode rightNode = nodes[rightIndex];
 		
-			float dist1 = IntersectAABB(ray.origin, invDir, leftNode.min.xyz , leftNode.max.xyz , out->t);
-			float dist2 = IntersectAABB(ray.origin, invDir, rightNode.min.xyz, rightNode.max.xyz, out->t);
-	
-			if (dist1 > dist2) { SWAPF(dist1, dist2); SWAPUINT(leftIndex, rightIndex); }
+		float dist1 = IntersectAABB(ray.origin, invDir, leftNode.min.xyz , leftNode.max.xyz , out->t);
+		float dist2 = IntersectAABB(ray.origin, invDir, rightNode.min.xyz, rightNode.max.xyz, out->t);
+	    
+		if (dist1 > dist2) { SWAPF(dist1, dist2); SWAPUINT(leftIndex, rightIndex); }
 		
-			if (dist1 == 1e30f) continue;
-			else {
-				node = nodes + leftIndex;
-				if (dist2 != 1e30f) nodesToVisit[currentNodeIndex++] = rightIndex;
-				goto traverse;
-			}
+		if (dist1 == 1e30f) continue;
+		else {
+			node = nodes + leftIndex;
+			if (dist2 != 1e30f) nodesToVisit[currentNodeIndex++] = rightIndex;
+			goto traverse;
+		}
 	}
 	return intersection;
 }
 
 // ---- KERNELS ----
 
-kernel void Trace (
+kernel void Trace(
 	write_only image2d_t screen,
 	global const Texture* textures,
 	global const RGB8* texturePixels,
@@ -198,12 +200,18 @@ kernel void Trace (
 {
 	const int i = get_global_id(0), j = get_global_id(1);
 	
+	// assert
+	if (sizeof(Triangle) != 64) {
+		return write_imagef(screen, (int2)(i, j), (float4)(0.5f));
+	}
+
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
 	
 	float3 lightDir = (float3)(0.5f, -0.5f, 0.0f); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
-	float atmosphericLight = 0.2f;
+	float atmosphericLight = 0.4f;
+
 	for (int j = 0; j < 1; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
@@ -217,8 +225,7 @@ kernel void Trace (
 		if (IntersectPlane(ray, &besthit)) {
 			record.point = ray.origin + ray.direction * besthit.distance;
 		}
-		else
-		{
+		else {
 			Sphere currentSphere = spheres[besthit.index];
 			float3 center = vload3(0, currentSphere.position);
 			record.point = ray.origin + ray.direction * besthit.distance;
@@ -249,8 +256,15 @@ kernel void Trace (
 				record.point = meshRay.origin + triout.t * meshRay.direction;
 				record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x.xyz)); // maybe precalculate
 				Material material = materials[as_uint(triangle.x.w)];
+				
+				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
+				
+				float2 uv = (convert_float2(triangle.uv0) * baryCentrics.x) 
+					      + (convert_float2(triangle.uv1) * baryCentrics.y)
+					      + (convert_float2(triangle.uv2) * baryCentrics.z);
 
-				RGB8 pixel = texturePixels[SampleTexture(textures[material.textureIndex], triout.u, triout.v)];
+				RGB8 pixel = texturePixels[SampleTexture(textures[material.textureIndex], uv)];
+
 				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
 				besthit.distance = triout.t;	
 				roughness = material.roughness;

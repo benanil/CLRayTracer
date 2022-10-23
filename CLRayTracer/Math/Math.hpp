@@ -44,7 +44,6 @@ FINLINE float rsqrt(float number)
 {
 	long i;
 	float x2, y;
-
 	x2 = number * 0.5F;
 	y  = number;
 	i  = * ( long * ) &y;                       // evil floating point bit level hacking
@@ -52,6 +51,38 @@ FINLINE float rsqrt(float number)
 	y  = * ( float * ) &i;
 	y  = y * ( 1.5f - ( x2 * y * y ) );   // 1st iteration
 	return y;
+}
+
+typedef ushort half;
+
+FINLINE float ConvertFloatToHalf(float Value)
+{
+	uint Result;
+	uint IValue = ((uint*)(&Value))[0];
+	uint Sign = (IValue & 0x80000000U) >> 16U;
+	IValue = IValue & 0x7FFFFFFFU;      // Hack off the sign
+
+	// if (IValue > 0x47FFEFFFU)
+	// {
+	// 	// The number is too large to be represented as a half.  Saturate to infinity.
+	// 	Result = 0x7FFFU;
+	// }
+	// else
+	if (IValue < 0x38800000U)
+	{
+		// The number is too small to be represented as a normalized half.
+		// Convert it to a denormalized value.
+		uint Shift = 113U - (IValue >> 23U);
+		IValue = (0x800000U | (IValue & 0x7FFFFFU)) >> Shift;
+	}
+	else
+	{
+		// Rebias the exponent to represent the value as a normalized half.
+		IValue += 0xC8000000U;
+	}
+
+	Result = ((IValue + 0x0FFFU + ((IValue >> 13U) & 1U)) >> 13U)&0x7FFFU; 
+	return (short)(Result | Sign);
 }
 
 // Code below adapted from DirectX::Math

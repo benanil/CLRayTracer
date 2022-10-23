@@ -8,12 +8,14 @@
 #include <fast_obj.h>
 #include <malloc.h>
 #include "Logger.hpp"
+#include "Timer.hpp"
+#include <emmintrin.h>
 
 // max texture and image etc: 16 texture, 16 mesh
 #ifndef CL_MAX_RESOURCE
 #	define CL_MAX_RESOURCE 16
 #endif
-// 10mb for both textures and meshes
+// 10mb for textures, meshes, bvh, kernel codes etc.
 constexpr size_t CL_MAX_RESOURCE_MEMORY = 1.049e+7 * 10; //*10 because jpeg compression
 
 // we will import textures and mesh to same memory and push it to the gpu
@@ -99,37 +101,53 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 	Mesh& mesh = meshes[numMeshes];
 
 	fastObjMesh* meshObj = fast_obj_read(path);
-
+	if (!meshObj) {
+		AXERROR("mesh importing failed! obj is not exist!"); exit(0);
+	}
 	mesh.numTriangles = meshObj->index_count / 3; 
 	mesh.triangleStart = arenaOffset / sizeof(Tri);
 
-	if (arenaOffset + (mesh.numTriangles * sizeof(Tri)) > CL_MAX_RESOURCE_MEMORY)
-	{
-		AXERROR("mesh importing failed! CL_MAX_RESOURCE_MEMORY is not enough!"); assert(0);
-		exit(0); return 0;
+	if (arenaOffset + (mesh.numTriangles * sizeof(Tri)) > CL_MAX_RESOURCE_MEMORY) {
+		AXERROR("mesh importing failed! CL_MAX_RESOURCE_MEMORY is not enough!"); exit(0);
 	}
 
 	Tri* tris = (Tri*)(arena + arenaOffset);
 
 	fastObjIndex* meshIdx = meshObj->indices;
-	// todo use simd here
+
 	for (int i = 0; i < mesh.numTriangles; ++i)
 	{
 		float* posPtr = meshObj->positions + (meshIdx->p * 3);
+		float* texcoorPtr = meshObj->texcoords + (meshIdx->t * 2);
 		tris->vertex0 = float3(posPtr[0], posPtr[1], posPtr[2]);
+		tris->uv0x = ConvertFloatToHalf(texcoorPtr[0]);
+		tris->uv0y = ConvertFloatToHalf(1.0f - texcoorPtr[1]);
 		meshIdx++;
+
+		// uint32_t x = *((uint32_t*)&f); // uint16_t h = ((x >> 16) & 0x8000); // 32768 // // 9187343241974906880; 939524096 31744
+		// h |= (((x & 0x7f800000) - 0x38000000) >> 13) & 0x7c00;
+		// h |= (x >> 13) & 0x03ff; // 0x03ff
+
 		posPtr = meshObj->positions + (meshIdx->p * 3);
+		texcoorPtr = meshObj->texcoords + (meshIdx->t * 2);
 		tris->vertex1 = float3(posPtr[0], posPtr[1], posPtr[2]);
+		tris->uv1x = ConvertFloatToHalf(texcoorPtr[0]);
+		tris->uv1y = ConvertFloatToHalf(1.0f - texcoorPtr[1]);
 		meshIdx++;	
 
 		posPtr = meshObj->positions + (meshIdx->p * 3);
+		texcoorPtr = meshObj->texcoords + (meshIdx->t * 2);
 		tris->vertex2 = float3(posPtr[0], posPtr[1], posPtr[2]);
+		tris->uv2x = ConvertFloatToHalf(texcoorPtr[0]);
+		tris->uv2y = ConvertFloatToHalf(1.0f - texcoorPtr[1]);
 		meshIdx++; tris++;
 	}
 
 	// todo add material indexes to vertices
 
 	arenaOffset += mesh.numTriangles * sizeof(Tri);
+
+	printf("num triangles: %d", mesh.numTriangles);
 
 	fast_obj_destroy(meshObj);
 	return numMeshes++;

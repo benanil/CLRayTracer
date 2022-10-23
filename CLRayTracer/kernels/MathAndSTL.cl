@@ -143,9 +143,9 @@ int SampleRotatedSphereTexture(float3 position, float3 center, float rotationx, 
 
 #define SAMPLE_SPHERE_TEXTURE(pos, center, texture) texturePixels[SampleSphereTexture(pos, center, texture)]
 
-int SampleTexture(Texture texture, float u, float v)
+int SampleTexture(Texture texture, float2 uv)
 {
-	int uScaled = clamp((int)(texture.width  * u), 0, texture.width ); // (0, 1) to (0, TextureWidth )
-	int vScaled = clamp((int)(texture.height * v), 0, texture.height); // (0, 1) to (0, TextureHeight)
+	int uScaled = clamp((int)(texture.width  * uv.x), 0, texture.width  - 1); // (0, 1) to (0, TextureWidth )
+	int vScaled = clamp((int)(texture.height * uv.y), 0, texture.height - 1); // (0, 1) to (0, TextureHeight)
 	return vScaled * texture.width + texture.offset + uScaled;
 }

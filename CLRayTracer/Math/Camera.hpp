@@ -32,6 +32,8 @@ struct Camera
 	
 	float pitch = 0.0f, yaw = 0.0f, senstivity = 20.0f;
 
+	bool wasPressing = false;
+
 	Camera() {}
 
 	Camera(Vector2i xviewPortSize)
@@ -55,7 +57,6 @@ struct Camera
 
 	void Update()
 	{
-		static bool wasPressing = false;
 		bool pressing = Window::GetMouseButton(MouseButton_Right);
 		if (!pressing) { wasPressing = false; return; }
 
