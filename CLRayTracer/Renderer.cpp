@@ -11,9 +11,12 @@
 #include "Logger.hpp"
 #include "Math/Camera.hpp"
 #include "Math/Random.hpp"
-#include "ResourceManager.hpp"
 
 // todo: 
+//      dynamicly add meshes, spheres, textures, materials, skybox
+//      update gpu buffers
+//      run renderer on seperate thread
+//      run gameplay, physics etc. code in main thread
 //      specular, reflections
 //      shadow, optimize, brdf
 
@@ -44,9 +47,12 @@ void main()\
 	cl_command_queue command_queue;
 	cl_program program;
 
-	cl_mem clglScreen, rayMem, sphereMem, vertexMem, materialMem;
-	constexpr int numSpheres = 5;
-	Sphere spheres[numSpheres];
+	cl_mem clglScreen, rayMem, sphereMem, instanceMem;
+		
+	Sphere spheres[Renderer::NumSpheres];
+	MeshInstance meshInstances[Renderer::MaxNumInstances];
+
+	uint numMeshInstances = 0u;
 
 	GLuint VAO;
 	GLuint shaderProgram;
@@ -156,7 +162,7 @@ int Renderer::Initialize()
 	// create command queue using the context and device
 	command_queue = clCreateCommandQueueWithProperties(context, device_id, nullptr, &clerr);
 
-	ResourceManager::Initialize();
+	ResourceManager::Initialize(context);
 	
 	// no need to delete this kernel code memory allocated from arena allocator
 	char* kernelCode = Helper::ReadCombineKernels(); 
@@ -178,58 +184,37 @@ int Renderer::Initialize()
 	}
 
 	ResourceManager::PrepareTextures();
-
-	char skyTexture     = ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
-	char sunTexture     = ResourceManager::ImportTexture("Assets/2k_sun.jpg");
-	char earthTexture   = ResourceManager::ImportTexture("Assets/earthmap.jpg");
-	char moonTexture    = ResourceManager::ImportTexture("Assets/2k_moon.jpg");
-	char marsTexture    = ResourceManager::ImportTexture("Assets/2k_mars.jpg");
-	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	char boxTexture     = ResourceManager::ImportTexture("Assets/textures/M24R_C.jpg");
-
-	ResourceManager::PushTexturesToGPU(context);
-	
 	ResourceManager::PrepareMeshes();
-		MeshHandle bunnyMesh = ResourceManager::ImportMesh("Assets/bunny.obj");
-		MeshHandle cubeMesh  = ResourceManager::ImportMesh("Assets/M24_R_Low_Poly_Version_obj.obj");
-		
-		ResourceManager::SetMeshPosition(cubeMesh, float3(2.0f, 5.0f, -2.0f));
 
-	ResourceManager::PushMeshesToGPU(context);
-
-	constexpr int numMaterials = 2;
-	Material materials[numMaterials];
-	{
-		Material* firstMaterial = materials + 0;
-		firstMaterial->color = 0x00FF0000u | (80 << 16) | (55);
-		firstMaterial->roughness = 0.5f;
-		firstMaterial->textureIndex = 0u;
-
-		Material* boxMaterial = materials + 1;
-		boxMaterial->color = ~0u;
-		boxMaterial->roughness = 0.5f;
-		boxMaterial->textureIndex = boxTexture;
-	}
-
-	Random::PCG pcg{};
-	// create random sphere positions&colors
-	constexpr float pi5 = PI / 5.0f;
-	PushSphere(1.00f, pi5 * 1, 5.0f, pcg.Next(), sunTexture    );
-	PushSphere(1.00f, pi5 * 2, 5.0f, pcg.Next(), earthTexture  );
-	PushSphere(1.00f, pi5 * 3, 5.0f, pcg.Next(), moonTexture   );
-	PushSphere(1.00f, pi5 * 4, 5.0f, pcg.Next(), marsTexture   );
-	PushSphere(1.00f, pi5 * 5, 5.0f, pcg.Next(), jupiterTexture);
+	// skybox texture no need to store handle
+	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	
-	// specify which kernel from the program to execute
-	rayMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
+	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
+	MeshHandle dragonMesh = ResourceManager::ImportMesh("Assets/Bunny.obj");
+	MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
+
+	ResourceManager::PushMeshesToGPU(command_queue);
+
+	ResourceManager::PushTexturesToGPU(command_queue);
+
+	instanceMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(MeshInstance) * MaxNumInstances, nullptr, &clerr); assert(clerr == 0);
+	// todo create instances
+	BeginInstanceRegister();
+
+	// RegisterMeshInstance(dragonMesh, ResourceManager::NoneMaterial, float3(0.0f, 0.0f, 1.0f));
+	RegisterMeshInstance(sponzaMesh, ResourceManager::DefaultMaterial, float3(0.0f, 0.0f, -1.0f));
+
+	EndInstanceRegister();
+	// create random sphere positions&colors
+	PushSphere(1.00f, PI, 5.0f, 0xffffffffu, jupiterTexture);
+	
+	rayMem = clCreateBuffer(context, 0, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
 
 	traceKernel  = clCreateKernel(program, "Trace", &clerr); assert(clerr == 0);
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
 
 	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
-
-	sphereMem   = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * numSpheres, spheres, &clerr); assert(clerr == 0);
-	materialMem = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, sizeof(Material) * numMaterials, materials, &clerr); assert(clerr == 0);
+	sphereMem  = clCreateBuffer(context, 32, sizeof(Sphere) * NumSpheres, spheres, &clerr); assert(clerr == 0);
 
 	return 1;
 }
@@ -251,6 +236,59 @@ void Renderer::OnWindowResize(int width, int height)
 	camera.RecalculateProjection(width, height);
 }
 
+static uint numRegisteredInstances = 0, lastRegisterInstanceIndex = 0;
+
+void Renderer::BeginInstanceRegister() {
+	numRegisteredInstances = 0;
+}
+
+MeshInstanceHandle Renderer::RegisterMeshInstance(
+	 MeshHandle handle, MaterialHandle materialHandle, float3 position)
+{
+	if (numMeshInstances >= MaxNumInstances) { AXERROR("too many mesh instances please reduce number of instances or increase number of instances!"); exit(0); }
+	
+	if (materialHandle == ResourceManager::DefaultMaterial) {
+		materialHandle = ResourceManager::GetMeshInfo(handle).materialStart;
+	}
+	MeshInstance& instance = meshInstances[numMeshInstances++];
+	instance.meshIndex = handle;
+	instance.materialStart = materialHandle;
+	instance.position = position;
+	numRegisteredInstances++;
+}
+
+void Renderer::EndInstanceRegister() {
+	clEnqueueWriteBuffer(command_queue, instanceMem, true, lastRegisterInstanceIndex * sizeof(MeshInstance), numRegisteredInstances * sizeof(MeshInstance), meshInstances + lastRegisterInstanceIndex, 0, 0, 0);	
+	lastRegisterInstanceIndex += numRegisteredInstances;
+	numRegisteredInstances = 0;
+}
+
+static ushort removedInstances[50]; // we can remove max 50 objects each frame
+static ushort numRemovedInstances = 0;
+static ushort MinUpdatedInstanceIndex = 0xFFFFu, MaxUpdatedInstanceIndex = 0u;
+static bool shouldUpdateInstances = 0;
+static bool hasRemovedInstances = 0;
+void Renderer::RemoveMeshInstance(MeshInstanceHandle handle) {
+	if (numRegisteredInstances == 0) { AXERROR("you cant remove mesh instances while registering instances!"); exit(0); }
+	hasRemovedInstances = true;
+	removedInstances[numRemovedInstances++] = handle;
+}
+
+void Renderer::SetMeshInstanceMaterial(MeshInstanceHandle instanceHandle, MaterialHandle materialHandle)
+{
+	meshInstances[instanceHandle].materialStart = materialHandle; shouldUpdateInstances = true;
+	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
+	MaxUpdatedInstanceIndex = Max(instanceHandle, (uint)MaxUpdatedInstanceIndex);
+}
+
+void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 position) {
+	meshInstances[instanceHandle].position = position; shouldUpdateInstances = true;
+	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
+	MaxUpdatedInstanceIndex = Max(instanceHandle, (uint)MaxUpdatedInstanceIndex);
+}
+
+void Renderer::ClearAllInstances() { numMeshInstances = 0; }
+
 void Renderer::Render()
 {
 	camera.Update();
@@ -258,6 +296,18 @@ void Renderer::Render()
 
 	if (Window::IsFocused() && camera.wasPressing) 
 	{
+		if (shouldUpdateInstances)
+		{
+			clEnqueueWriteBuffer(command_queue, instanceMem
+			  , true, MinUpdatedInstanceIndex * sizeof(MeshInstance)
+			  , MaxUpdatedInstanceIndex - MinUpdatedInstanceIndex * sizeof(MeshInstance)
+			  , meshInstances + MinUpdatedInstanceIndex, 0, 0, 0);
+			MinUpdatedInstanceIndex = 0xFFFFu; MaxUpdatedInstanceIndex = 0x0u;
+			shouldUpdateInstances = false;
+		}
+
+		if (hasRemovedInstances) { /*todo*/ }
+
 		// glClear(GL_COLOR_BUFFER_BIT);
 
 		Vector2i windowSize = Window::GetWindowScale();
@@ -270,8 +320,8 @@ void Renderer::Render()
 		} trace_args;
 
 		trace_args.cameraPosition = camera.position;
-		trace_args.numSpheres = numSpheres;
-		trace_args.numMeshes = ResourceManager::GetNumMeshes();
+		trace_args.numSpheres = NumSpheres;
+		trace_args.numMeshes = numMeshInstances;
 		trace_args.time = time;
 
 		cl_int clerr; cl_event event;
@@ -286,17 +336,21 @@ void Renderer::Render()
 		clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
 		// prepare Rendering
 		clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
-	
-		clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen);    assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), ResourceManager::GetTextureHandleMem()); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), ResourceManager::GetTextureDataMem()  ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), ResourceManager::GetMeshesMem()       ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), ResourceManager::GetMeshTriangleMem() ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem);   	    assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem);   	assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args);  assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), ResourceManager::GetBVHMem()); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &materialMem); assert(clerr == 0);
+		
+		cl_mem textureHandleMem, textureDataMem, meshTriangleMem, bvhMem, bvhIndicesMem, materialsMem;
+		ResourceManager::GetGPUMemories(&textureHandleMem, &textureDataMem, &meshTriangleMem, &bvhMem, &bvhIndicesMem, &materialsMem);
+
+		clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen      ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), &textureHandleMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &textureDataMem  ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &bvhIndicesMem   ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &meshTriangleMem ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem          ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem       ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args   );  assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &bvhMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &materialsMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 10, sizeof(cl_mem), &instanceMem); assert(clerr == 0);
 
 		// execute rendering
 		clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
@@ -307,7 +361,7 @@ void Renderer::Render()
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 	double ms = (Window::GetTime() - time) * 1000.0;
 	Window::ChangeName(ms);
-	if (time > 5.0f && ms > 60) { AXERROR("GPU Botleneck! %f ms", ms); exit(0); }
+	if (time > 5.0f && ms > 80) { AXERROR("GPU Botleneck! %f ms", ms); exit(0); }
 }
 
 void Renderer::Terminate()
@@ -315,13 +369,13 @@ void Renderer::Terminate()
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteProgram(shaderProgram);
 	glDeleteTextures(1, &screenTexture);
-	ResourceManager::Destroy();
+	ResourceManager::Finalize();
 
 	// cleanup - release OpenCL resources
 	clReleaseMemObject(clglScreen);
 	clReleaseMemObject(rayMem);
 	clReleaseMemObject(sphereMem);
-	clReleaseMemObject(materialMem);
+	clReleaseMemObject(instanceMem);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(command_queue);
 	clReleaseKernel(traceKernel);

@@ -11,5 +11,5 @@ Ni 1.000000
 d 1.000000
 illum 2
 map_Bump textures\\M24R_N.jpg
-map_Kd textures\\glanz .jpg
+map_Kd textures\\M24R_C.jpg
 map_Ks textures\\M24R_S.jpg

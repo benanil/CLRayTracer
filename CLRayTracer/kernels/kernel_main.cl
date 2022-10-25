@@ -29,8 +29,10 @@ typedef struct _HitRecord {
 } HitRecord;
 
 typedef struct _Material {
-	uint color, textureIndex;
-	float roughness, padd1;
+	uint color; 
+	uint albedoTextureIndex;
+	uint specularTextureIndex;  
+	float shininess;
 } Material;
 
 typedef struct _Triangle {
@@ -44,11 +46,10 @@ typedef struct _Triout {
 	float t, u, v; uint triIndex;
 } Triout;
 
-// this structure consist of multiple sub meshes 
-typedef struct _Mesh {
-	uint bvhIndex, padd, padd1, padd2;
-	float3 position;
-} Mesh;
+typedef struct _MeshInstance { 
+	float position[3]; // todo add rotation and scale aka matrix
+	ushort meshIndex, materialStart; 
+} MeshInstance;
 
 typedef struct _BVHNode {
 	float4 min, max; 
@@ -189,13 +190,14 @@ kernel void Trace(
 	write_only image2d_t screen,
 	global const Texture* textures,
 	global const RGB8* texturePixels,
-	global const Mesh* meshes,
+	global const uint* bvhIndices,
 	global const Triangle* triangles,
 	global const float* rays, 
 	global const Sphere* spheres,
 	TraceArgs trace_args,
 	global const BVHNode* nodes,
-	global const Material* materials
+	global const Material* materials,
+	global const MeshInstance* meshInstances
 ) 
 {
 	const int i = get_global_id(0), j = get_global_id(1);
@@ -235,7 +237,7 @@ kernel void Trace(
 
 			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
 			record.color.xyz = color * UNPACK_RGB8(pixel);
-			roughness = currentSphere.roughness;
+			roughness = 0.5f;// currentSphere.shininess;
 		}
 
 		Ray meshRay;
@@ -246,28 +248,28 @@ kernel void Trace(
 			Triout triout;
 			triout.t = besthit.distance;
 			triout.triIndex = 0;
-			Mesh mesh = meshes[i];
+			MeshInstance instance = meshInstances[i];
 			// change ray position instead of mesh position for capturing in different positions
-			meshRay.origin = ray.origin - mesh.position;
-
-			if (IntersectBVH(meshRay, nodes, mesh.bvhIndex, triangles, &triout)) 
+			meshRay.origin = ray.origin - vload3(0, instance.position);
+			// instance.meshIndex = bvhIndex
+			if (IntersectBVH(meshRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
 			{
 				Triangle triangle = triangles[triout.triIndex];
 				record.point = meshRay.origin + triout.t * meshRay.direction;
 				record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x.xyz)); // maybe precalculate
-				Material material = materials[as_uint(triangle.x.w)];
+				Material material = materials[instance.materialStart + as_uint(triangle.x.w)];
 				
 				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
 				
-				float2 uv = (convert_float2(triangle.uv0) * baryCentrics.x) 
-					      + (convert_float2(triangle.uv1) * baryCentrics.y)
-					      + (convert_float2(triangle.uv2) * baryCentrics.z);
+				half2 uv =  triangle.uv0 * convert_half(baryCentrics.x) 
+					      + triangle.uv1 * convert_half(baryCentrics.y)
+					      + triangle.uv2 * convert_half(baryCentrics.z);
 
-				RGB8 pixel = texturePixels[SampleTexture(textures[material.textureIndex], uv)];
+				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
 
 				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
 				besthit.distance = triout.t;	
-				roughness = material.roughness;
+				roughness = 0.5f; // material.roughness;
 			}
 		}
 		

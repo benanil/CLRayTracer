@@ -1,7 +1,8 @@
+
 #pragma once
 #include "Matrix.hpp"
 
-struct Transform
+class Transform
 {
 private:
 	Matrix4 transform;

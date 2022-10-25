@@ -55,34 +55,64 @@ FINLINE float rsqrt(float number)
 
 typedef ushort half;
 
-FINLINE float ConvertFloatToHalf(float Value)
+// https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion/60047308#60047308
+FINLINE unsigned short ConvertFloatToHalf(float f) {
+	unsigned x = *(unsigned*)&f;
+	return ((x >> 16u) & 0x8000u) | (((x & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x >> 13u) & 0x03ffu;
+}
+
+FINLINE float ConvertHalfToFloat(half h) {
+	return ((h & 0x8000u) << 16u) | (((h & 0x7c00u) + 0x1C000u) << 13u) | ((h & 0x03FFu) << 13u);
+}
+
+FINLINE uint PackColorRGBU32(float r, float g, float b) {
+	return (uint)(r * 255.0f) | ((uint)(g * 255.0f) << 8) | ((uint)(b * 255.0f) << 16);
+}
+
+FINLINE uint PackColorRGBAU32(float* c) {
+	return (uint)(*c * 255.0f) | ((uint)(c[1] * 255.0f) << 8) | ((uint)(c[2] * 255.0f) << 16) | ((uint)(c[3] * 255.0f) << 24);
+}
+
+FINLINE void UnpackColorRGBf(unsigned color, float* colorf)
+{
+	constexpr float toFloat = 1.0f / 255.0f;
+	colorf[0] = float(color >> 0  & 0xFF) * toFloat;
+	colorf[1] = float(color >> 8  & 0xFF) * toFloat;
+	colorf[2] = float(color >> 16 & 0xFF) * toFloat;
+}
+
+FINLINE void UnpackColorRGBAf(unsigned color, float* colorf) {
+	constexpr float toFloat = 1.0f / 255.0f;
+	colorf[0] = float(color >> 0  & 0xFF) * toFloat;
+	colorf[1] = float(color >> 8  & 0xFF) * toFloat;
+	colorf[2] = float(color >> 16 & 0xFF) * toFloat;
+	colorf[3] = float(color >> 24) * toFloat;
+}
+
+FINLINE unsigned short ConvertFloatToHalfSafe(float Value)
 {
 	uint Result;
 	uint IValue = ((uint*)(&Value))[0];
 	uint Sign = (IValue & 0x80000000U) >> 16U;
 	IValue = IValue & 0x7FFFFFFFU;      // Hack off the sign
 
-	// if (IValue > 0x47FFEFFFU)
-	// {
-	// 	// The number is too large to be represented as a half.  Saturate to infinity.
-	// 	Result = 0x7FFFU;
-	// }
-	// else
-	if (IValue < 0x38800000U)
-	{
+	if (IValue > 0x47FFEFFFU) {
+		// The number is too large to be represented as a half.  Saturate to infinity.
+		Result = 0x7FFFU;
+	}
+	else if (IValue < 0x38800000U) {
 		// The number is too small to be represented as a normalized half.
 		// Convert it to a denormalized value.
 		uint Shift = 113U - (IValue >> 23U);
 		IValue = (0x800000U | (IValue & 0x7FFFFFU)) >> Shift;
 	}
-	else
-	{
+	else {
 		// Rebias the exponent to represent the value as a normalized half.
 		IValue += 0xC8000000U;
 	}
 
 	Result = ((IValue + 0x0FFFU + ((IValue >> 13U) & 1U)) >> 13U)&0x7FFFU; 
-	return (short)(Result | Sign);
+	return (unsigned short)(Result | Sign);
 }
 
 // Code below adapted from DirectX::Math

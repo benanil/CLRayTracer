@@ -3,26 +3,31 @@
 #include "Math/Vector.hpp"
 #include "Common.hpp"
 
-struct Texture
-{
+struct Texture {
 	int width, height, offset, padd;
 };
 
-struct BVHNode
+AX_ALIGNED(16) struct BVHNode
 {
 	struct { float3 aabbMin; uint leftFirst; };
 	struct { float3 aabbMax; uint triCount; };
 	bool isLeaf() const { return triCount > 0; }
 };
 
-struct Mesh {
-	uint bvhIndex, numTriangles, triangleStart, padd;
-	float3 position; float padd1;
+struct MeshInfo {
+	uint numTriangles; 
+	uint triangleStart; 
+	ushort materialStart; 
+	ushort numMaterials; 
 };
 
+// this material will store default mesh/submesh
+// values and we will be able to change properties for different mesh instances
 struct Material {
-	uint color, textureIndex;
-	float roughness, padd1;
+	uint color; 
+	uint albedoTextureIndex;
+	uint specularTextureIndex;  
+	float shininess;
 };
 
 #pragma pack(1)
@@ -34,8 +39,6 @@ typedef struct Sphere_t
 	unsigned color;
 	float rotationx, rotationy;
 } Sphere;
-
-#pragma pack(1)
 
 AX_ALIGNED(16) struct Tri { 
 	float3 vertex0; float centeroidx; 
@@ -50,41 +53,53 @@ AX_ALIGNED(16) struct Tri {
 
 static_assert(sizeof(Tri) == 64);
 
-typedef uint TextureHandle;
-typedef uint MeshHandle;
+typedef ushort TextureHandle;
+typedef ushort MeshHandle;
+typedef ushort MaterialHandle;
+
+// this is same for each resource type:
+//     the idea is:
+//         create big chunk of data pool on GPU
+//         create resources
+//         push to gpu
 
 namespace ResourceManager
 {
 	TextureHandle ImportTexture(const char* path);
 	MeshHandle ImportMesh(const char* path);
 
-	inline constexpr TextureHandle GetWhiteTexture() { return 0; }
-	inline constexpr TextureHandle GetBlackTexture() { return 1; }
-	inline constexpr Material DefaultMaterial() {
-		Material material;
-		material.color = ~0;// white
-		material.roughness = 0.5f;
-		material.textureIndex = 0;// white texture
-		return material;
-	}
-	
-	void SetMeshPosition(MeshHandle handle, float3 point);
+	constexpr TextureHandle  WhiteTexture = 0;
+	constexpr TextureHandle  BlackTexture = 1;
+	constexpr MaterialHandle NoneMaterial = 0;
+	constexpr MaterialHandle DefaultMaterial = 0xFFFF;
 
 	void PrepareTextures();
-	cl_mem* GetTextureHandleMem();
-	cl_mem* GetTextureDataMem();
-	cl_mem* GetMeshTriangleMem();
-	cl_mem* GetBVHMem();
-	cl_mem* GetMeshesMem();
+
+	void GetGPUMemories(
+		cl_mem* textureHandleMem,
+		cl_mem* textureDataMem  ,
+		cl_mem* meshTriangleMem ,
+		cl_mem* bvhMem          ,
+		cl_mem* meshesMem       ,
+		cl_mem* materialMem     
+	);
+
+	// manipulate returning material's properties and use handle for other things, REF handle
+	// for using with multiple submeshes you need to set count to number of submeshes
+	Material* CreateMaterial(MaterialHandle* handle, int count = 1);
 
 	void PrepareMeshes();
-	void PushMeshesToGPU(cl_context context);
+	void PushMeshesToGPU(cl_command_queue queue);
+	void PushMaterialsToGPU(cl_command_queue queue);
 	ushort GetNumMeshes();
 
-	void Initialize();
-	void Destroy();
+	MeshInfo GetMeshInfo(MeshHandle handle);
 
-	void PushTexturesToGPU(cl_context context);
+	void Initialize(cl_context context);
+	void Destroy();
+	void Finalize();
+
+	void PushTexturesToGPU(cl_command_queue context);
 	void* GetAreaPointer(); // unsafe
 }
 

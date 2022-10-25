@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <stdio.h>
 #include "Logger.hpp"
 
 #ifndef NDEBUG
@@ -38,6 +39,6 @@ struct Timer
 		auto start = time_point_cast<microseconds>(start_point).time_since_epoch().count();
 		auto end = time_point_cast<microseconds>(end_point).time_since_epoch().count();
 		auto _duration = end - start;
-		AXLOG("speed ms: %f", (_duration * 0.001));
+		printf("speed ms: %f", (_duration * 0.001));
 	}
 };

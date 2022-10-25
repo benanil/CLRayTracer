@@ -154,6 +154,7 @@ static float FindBestSplitPlane(const BVHNode* node, Tri* tris, int* outAxis, fl
 	return bestCost;
 }
 
+
 static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 {
 	// terminate recursion
@@ -168,11 +169,11 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 	// 
 	// if (splitCost >= nosplitCost) return;
 	
-	// determine split axis and position
+	// // determine split axis and position
 	float3 extent = node->aabbMax - node->aabbMin; 
 	int axis = extent.y > extent.x;            // if (extent.y > extent.x) axis = 1; // premature optimization :D
 	axis = extent.z > extent[axis] ? 2 : axis; // if (extent.z > extent[axis]) axis = 2;
-
+	
 	float splitPos = node->aabbMin[axis] + extent[axis] * 0.5f;
 
 	// in-place partition
@@ -186,17 +187,13 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 			// swap elements with simd 2x faster
 			__m128* a = (__m128*)(tris + i);
 			__m128* b = (__m128*)(tris + j);
-
-			__m128 t[4] { *a, a[1], a[2], a[3] };
-			a[0] = b[0];
-			a[1] = b[1];
-			a[2] = b[2];
-			a[3] = b[3];
-
-			b[0] = t[0];
-			b[1] = t[1];
-			b[2] = t[2];
-			b[3] = t[3];
+			
+			__m128 t = *a;
+			*a++ = *b, *b++ = t, t = *a; // swap a[0], b[0] 
+			*a++ = *b, *b++ = t, t = *a; // swap a[1], b[1]
+			*a++ = *b, *b++ = t, t = *a; // swap a[2], b[2]
+			*a = *b, *b = t;             // swap a[3], b[3]
+			
 			j--;
 		}
 	}
@@ -219,7 +216,7 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 	SubdivideBVH(bvhNode, tris, rightChildIdx);
 }
 
-BVHNode* BuildBVH(Tri* tris, Mesh* meshes, int numMeshes, BVHNode* nodes, int* _nodesUsed)
+BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices, uint* _nodesUsed)
 {
 	// 1239.74ms SIMD
 	// 556.51ms  SIMD with custom swap
@@ -238,13 +235,12 @@ BVHNode* BuildBVH(Tri* tris, Mesh* meshes, int numMeshes, BVHNode* nodes, int* _
 		tri->centeroidy = (tri->vertex0.y + tri->vertex1.y + tri->vertex2.y) * 0.333333f;
 		tri->centeroidz = (tri->vertex0.z + tri->vertex1.z + tri->vertex2.z) * 0.333333f;
 	}
-	
 	uint currTriangle = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		// assign all triangles to root node
 		uint rootNodeIndex = nodesUsed++;
 
-		meshes[i].bvhIndex = rootNodeIndex;
+		bvhIndices[i] = rootNodeIndex;
 		
 		BVHNode& root = nodes[rootNodeIndex];
 		root.leftFirst = currTriangle, root.triCount = meshes[i].numTriangles;

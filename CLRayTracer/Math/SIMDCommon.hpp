@@ -2,16 +2,6 @@
 #include "Math.hpp"
 #include <immintrin.h> 
 
-#ifndef AXGLOBALCONST
-#	if _MSC_VER
-#		define AXGLOBALCONST extern const __declspec(selectany)
-#	elif defined(__GNUC__) && !defined(__MINGW32__)
-#		define AXGLOBALCONST extern const __attribute__((weak))
-#   else 
-#       define AXGLOBALCONST 
-#	endif
-#endif
-
 __declspec(align(16)) struct Vector4UI
 {
 	union
