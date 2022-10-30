@@ -37,7 +37,7 @@ struct Camera
 	Camera() {}
 
 	Camera(Vector2i xviewPortSize)
-	: viewportSize(xviewPortSize), position(0.0f,0.0f, 5.0f), targetPosition(0.0f,0.0f,5.0f), Front(0.0f,0.0f,1.0f)
+	: viewportSize(xviewPortSize), position(0.0f,3.0f, 20.0f), targetPosition(0.0f,0.0f,-5.0f), Front(0.0f,0.0f,1.0f)
 	{
 		monitorSize = Window::GetMonitorScale();
 		RecalculateProjection(xviewPortSize.x, xviewPortSize.y);

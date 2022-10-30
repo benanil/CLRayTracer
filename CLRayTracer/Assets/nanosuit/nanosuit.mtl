@@ -1,0 +1,79 @@
+# Blender MTL File: 'nanosuit.blend'
+# Material Count: 6
+
+newmtl Arm
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 1.00000 1.00000 1.00000
+Ks 0.500000 0.500000 0.500000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Bump Assets/nanosuit/arm_showroom_ddn.png
+map_Ka Assets/nanosuit/arm_showroom_refl.jpg
+map_Kd Assets/nanosuit/arm_dif.jpg
+map_Ks Assets/nanosuit/arm_showroom_spec.jpg
+
+newmtl Body
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 1.00000 1.00000 1.00000
+Ks 0.500000 0.500000 0.500000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd Assets/nanosuit/body_dif.jpg
+map_Bump Assets/nanosuit/body_showroom_ddn.jpg
+map_Ka Assets/nanosuit/body_showroom_refl.jpg
+map_Ks Assets/nanosuit/body_showroom_spec.jpg
+
+newmtl Glass
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 1.00000 1.00000 1.00000
+Ks 0.500000 0.500000 0.500000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Bump Assets/nanosuit/glass_ddn.jpg
+map_Ka Assets/nanosuit/glass_refl.jpg
+map_Kd Assets/nanosuit/glass_dif.jpg
+
+newmtl Hand
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 1.00000 1.00000 1.00000
+Ks 0.500000 0.500000 0.500000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Bump hand_showroom_ddn.jpg
+map_Ka Assets/nanosuit/hand_showroom_refl.jpg
+map_Kd Assets/nanosuit/hand_dif.jpg
+map_Ks Assets/nanosuit/hand_showroom_spec.jpg
+
+newmtl Helmet
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 1.00000 1.00000 1.00000
+Ks 0.500000 0.500000 0.500000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Bump Assets/nanosuit/helmet_showroom_ddn.jpg
+map_Ka Assets/nanosuit/helmet_showroom_refl.jpg
+map_Kd Assets/nanosuit/helmet_diff.jpg
+map_Ks Assets/nanosuit/helmet_showroom_spec.jpg
+
+newmtl Leg
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 1.00000 1.00000 1.00000
+Ks 0.500000 0.500000 0.500000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Bump Assets/nanosuit/leg_showroom_ddn.jpg
+map_Ka Assets/nanosuit/leg_showroom_refl.jpg
+map_Kd Assets/nanosuit/leg_dif.jpg
+map_Ks Assets/nanosuit/leg_showroom_spec.jpg

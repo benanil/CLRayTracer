@@ -61,12 +61,22 @@ FINLINE unsigned short ConvertFloatToHalf(float f) {
 	return ((x >> 16u) & 0x8000u) | (((x & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x >> 13u) & 0x03ffu;
 }
 
+FINLINE void ConvertFloat2ToHalf2(half* h, unsigned* v) {
+	unsigned x = *v, x1 = v[1];
+	h[0] = ((x >> 16u) & 0x8000u) | (((x & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x >> 13u) & 0x03ffu;
+	h[1] = ((x1 >> 16u) & 0x8000u) | (((x1 & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x1 >> 13u) & 0x03ffu;
+}
+
 FINLINE float ConvertHalfToFloat(half h) {
 	return ((h & 0x8000u) << 16u) | (((h & 0x7c00u) + 0x1C000u) << 13u) | ((h & 0x03FFu) << 13u);
 }
 
 FINLINE uint PackColorRGBU32(float r, float g, float b) {
 	return (uint)(r * 255.0f) | ((uint)(g * 255.0f) << 8) | ((uint)(b * 255.0f) << 16);
+}
+
+FINLINE uint PackColorRGBU32(float* c) {
+	return (uint)(*c * 255.0f) | ((uint)(c[1] * 255.0f) << 8) | ((uint)(c[2] * 255.0f) << 16);
 }
 
 FINLINE uint PackColorRGBAU32(float* c) {

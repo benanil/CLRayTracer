@@ -190,8 +190,8 @@ int Renderer::Initialize()
 	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	MeshHandle dragonMesh = ResourceManager::ImportMesh("Assets/Bunny.obj");
-	MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
+	MeshHandle nanosuitMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
+	// MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
 
 	ResourceManager::PushMeshesToGPU(command_queue);
 
@@ -202,7 +202,12 @@ int Renderer::Initialize()
 	BeginInstanceRegister();
 
 	// RegisterMeshInstance(dragonMesh, ResourceManager::NoneMaterial, float3(0.0f, 0.0f, 1.0f));
-	RegisterMeshInstance(sponzaMesh, ResourceManager::DefaultMaterial, float3(0.0f, 0.0f, -1.0f));
+
+	Random::PCG pcg{};
+
+	for (int i = 0; i < 2; ++i) {
+		RegisterMeshInstance(nanosuitMesh, ResourceManager::DefaultMaterial, float3(pcg.NextFloat01() * 20.0f, 1.2f, pcg.NextFloat01() * 20.0f));
+	}
 
 	EndInstanceRegister();
 	// create random sphere positions&colors

@@ -26,6 +26,26 @@ float3 reflect(float3 v, float3 n) {
 	return v - n * dot(n, v) * 2.0f;
 }
 
+constant float Pr = 0.299f;
+constant float Pg = 0.587f;
+constant float Pb = 0.114f;
+
+float3 ACESFilm(float3 x)
+{
+	constant float a = 2.51f;
+	constant float b = 0.03f;
+	constant float c = 2.43f;
+	constant float d = 0.59f;
+	constant float e = 0.14f;
+	return (x * (a * x + b)) / (x * (c * x + d) + e);
+}
+
+float3 Saturation(float3 in, float change)
+{
+	float3 P = (float3)(sqrt(in.x * in.x * Pr + in.y * in.y * Pg + in.z * in.z * Pb));
+	return P + (in - P) * change; 
+}
+
 float Max3(float3 a) { return fmax(fmax(a.x, a.y), a.z); }
 float Min3(float3 a) { return fmin(fmin(a.x, a.y), a.z); }
 
@@ -145,7 +165,8 @@ int SampleRotatedSphereTexture(float3 position, float3 center, float rotationx, 
 
 int SampleTexture(Texture texture, half2 uv)
 {
-	int uScaled = clamp((int)(texture.width  * uv.x), 0, texture.width  - 1); // (0, 1) to (0, TextureWidth )
-	int vScaled = clamp((int)(texture.height * uv.y), 0, texture.height - 1); // (0, 1) to (0, TextureHeight)
+	uv -= floor(uv);
+	int uScaled = (int)(texture.width  * uv.x); // (0, 1) to (0, TextureWidth )
+	int vScaled = (int)(texture.height * uv.y); // (0, 1) to (0, TextureHeight)
 	return vScaled * texture.width + texture.offset + uScaled;
 }

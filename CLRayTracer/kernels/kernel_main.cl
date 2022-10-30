@@ -36,10 +36,9 @@ typedef struct _Material {
 } Material;
 
 typedef struct _Triangle {
-	float4 x; // w is material Index
-	float3 y, z;
+	float3 x, y, z; // triangle positions
 	half2 uv0, uv1, uv2;
-	int pad;
+	int materialIndex;
 } Triangle;
 
 typedef struct _Triout {
@@ -54,9 +53,6 @@ typedef struct _MeshInstance {
 typedef struct _BVHNode {
 	float4 min, max; 
 } BVHNode;
-
-#define GetLeftFirst(nod) (as_uint((nod)->min.w))
-#define GetTriCount(nod)  (as_uint((nod)->max.w))
 
 // ---- CONSTRUCTORS ----
 
@@ -97,12 +93,11 @@ bool IntersectSphere(float3 position, float radius, Ray ray, RayHit* besthit, in
 
 bool IntersectPlane(Ray ray, RayHit* besthit)
 {
-	return false;
 	float t = -ray.origin.y / ray.direction.y;
 	if (t > 0 && t < besthit->distance) 
 	{
 		float3 point = ray.origin + (ray.direction * t);
-		if (fabs(point.x) < 15.0f && fabs(point.z) < 15.0f)
+		if (fabs(point.x) < 80.0f && fabs(point.z) < 80.0f)
 			besthit->distance = t;
 		return true;
 	}
@@ -111,8 +106,8 @@ bool IntersectPlane(Ray ray, RayHit* besthit)
 
 bool IntersectTriangle(Ray ray, const global Triangle* tri, Triout* o, int i)
 {
-	const float3 edge1 = tri->y - tri->x.xyz;
-	const float3 edge2 = tri->z - tri->x.xyz;
+	const float3 edge1 = tri->y - tri->x;
+	const float3 edge2 = tri->z - tri->x;
 	const float3 h = cross( ray.direction, edge2 );
 	const float a = dot( edge1, h );
 	// if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
@@ -145,6 +140,8 @@ float IntersectAABB(float3 origin, float3 invDir, float3 aabbMin, float3 aabbMax
 
 #define SWAPF(x, y) float tf = x; x = y, y = tf;
 #define SWAPUINT(x, y) uint tu = x; x = y, y = tu;
+#define GetLeftFirst(nod) (as_uint((nod)->min.w))
+#define GetTriCount(nod)  (as_uint((nod)->max.w))
 
 int IntersectBVH(Ray ray, const global BVHNode* nodes, uint rootNode, const global Triangle* tris, Triout* out)
 {
@@ -209,7 +206,7 @@ kernel void Trace(
 
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
 	
-	float3 lightDir = (float3)(0.5f, -0.5f, 0.0f); // sun dir
+	float3 lightDir = (float3)(sin(1.2f), cos(-1.2f), 0.0f); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
 	float atmosphericLight = 0.4f;
@@ -226,6 +223,7 @@ kernel void Trace(
 		
 		if (IntersectPlane(ray, &besthit)) {
 			record.point = ray.origin + ray.direction * besthit.distance;
+			record.color = (float3)(70.0f / 255.0f, 70.0f/ 255.0f, 70.0f/ 255.0f);
 		}
 		else {
 			Sphere currentSphere = spheres[besthit.index];
@@ -256,8 +254,8 @@ kernel void Trace(
 			{
 				Triangle triangle = triangles[triout.triIndex];
 				record.point = meshRay.origin + triout.t * meshRay.direction;
-				record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x.xyz)); // maybe precalculate
-				Material material = materials[instance.materialStart + as_uint(triangle.x.w)];
+				record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x)); // maybe precalculate
+				Material material = materials[instance.materialStart + triangle.materialIndex];
 				
 				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
 				
@@ -266,6 +264,8 @@ kernel void Trace(
 					      + triangle.uv2 * convert_half(baryCentrics.z);
 
 				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
+				// uint pixel = WangHash(triangle.materialIndex * (triangle.materialIndex << 8) +
+				//                       (triangle.materialIndex << 16));
 
 				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
 				besthit.distance = triout.t;	
@@ -294,15 +294,17 @@ kernel void Trace(
 		// Shade
 		float ndl = fmax(dot(record.normal, -lightDir), atmosphericLight);
 		atmosphericLight *= 0.4f;
-		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); // color.w = roughness
+		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); 
 	
 		result += energy * (record.color * ndl);
 		energy *= specular;
 		
 		lightDir = ray.direction;
 	}
-	
-	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 0.1f));
+	result = Saturation(result, 1.2f) * 1.1f;
+	result = ACESFilm(result);
+
+	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 1.0f));
 }
 
 kernel void RayGen(int width, int height, global float* rays, Matrix4 inverseView, Matrix4 inverseProjection)

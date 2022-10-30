@@ -4,8 +4,8 @@
 #include "ResourceManager.hpp"
 #include <exception>
 
-// todo use tri.vertx.w as centeroid.x, use simd
-// todo binning again
+// done use tri.vertx.w as centeroid.x, use simd
+// todo binning again, fix SAH
 
 struct aabb 
 { 

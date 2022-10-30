@@ -11,18 +11,17 @@ AX_ALIGNED(16) struct BVHNode
 {
 	struct { float3 aabbMin; uint leftFirst; };
 	struct { float3 aabbMax; uint triCount; };
-	bool isLeaf() const { return triCount > 0; }
 };
 
 struct MeshInfo {
 	uint numTriangles; 
 	uint triangleStart; 
 	ushort materialStart; 
-	ushort numMaterials; 
 };
 
 // this material will store default mesh/submesh
 // values and we will be able to change properties for different mesh instances
+#pragma pack(1)
 struct Material {
 	uint color; 
 	uint albedoTextureIndex;
@@ -41,14 +40,14 @@ typedef struct Sphere_t
 } Sphere;
 
 AX_ALIGNED(16) struct Tri { 
-	float3 vertex0; float centeroidx; 
+	float3 vertex0; float centeroidx;
 	float3 vertex1; float centeroidy; 
-	float3 vertex2; float centeroidz; 
+	float3 vertex2; float centeroidz;
 
 	half uv0x, uv0y;
 	half uv1x, uv1y;
 	half uv2x, uv2y;
-	int padd;
+	int materialIndex;
 };
 
 static_assert(sizeof(Tri) == 64);
@@ -62,6 +61,7 @@ typedef ushort MaterialHandle;
 //         create big chunk of data pool on GPU
 //         create resources
 //         push to gpu
+//         flush cpu memory and fill it again
 
 namespace ResourceManager
 {

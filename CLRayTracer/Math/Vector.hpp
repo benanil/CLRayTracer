@@ -137,6 +137,7 @@ using Vector2f = Vector2<float>;
 using Vector2i = Vector2<int>;
 
 typedef Vector3f float3;
+typedef Vector2f float2;
 
 FINLINE float3 fminf(const float3& a, const float3& b) { return float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)); }
 FINLINE float3 fmaxf(const float3& a, const float3& b) { return float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)); }

@@ -13,7 +13,7 @@ typedef uint MeshInstanceHandle;
 namespace Renderer
 {
 	constexpr uint NumSpheres = 1;
-	constexpr uint MaxNumInstances = 40;
+	constexpr uint MaxNumInstances = 401;
 
 	// called from main.cpp
 	int Initialize();
