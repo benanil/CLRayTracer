@@ -125,12 +125,12 @@ struct Vector3f
 	Vector3f operator /= (float o) { x /= o; y /= o; z /= o; return *this; }
 	Vector3f operator -= (float o) { x -= o; y -= o; z -= o; return *this; }
 	
-	FINLINE static constexpr Vector3f Up()       { return Vector3f( 0,  1,  0); } 
-	FINLINE static constexpr Vector3f Left()     { return Vector3f(-1,  0,  0); } 
-	FINLINE static constexpr Vector3f Down()     { return Vector3f( 0, -1,  0); } 
-	FINLINE static constexpr Vector3f Right()    { return Vector3f( 1,  0,  0); } 
-	FINLINE static constexpr Vector3f Forward()  { return Vector3f( 0,  0,  1); } 
-	FINLINE static constexpr Vector3f Backward() { return Vector3f( 0,  0, -1); } 
+	static constexpr Vector3f Up()       { return Vector3f( 0,  1,  0); } 
+	static constexpr Vector3f Left()     { return Vector3f(-1,  0,  0); } 
+	static constexpr Vector3f Down()     { return Vector3f( 0, -1,  0); } 
+	static constexpr Vector3f Right()    { return Vector3f( 1,  0,  0); } 
+	static constexpr Vector3f Forward()  { return Vector3f( 0,  0,  1); } 
+	static constexpr Vector3f Backward() { return Vector3f( 0,  0, -1); } 
 };
 
 using Vector2f = Vector2<float>;
@@ -142,9 +142,9 @@ typedef Vector2f float2;
 FINLINE float3 fminf(const float3& a, const float3& b) { return float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)); }
 FINLINE float3 fmaxf(const float3& a, const float3& b) { return float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)); }
 
-FINLINE float Max3(float3 a) { return fmaxf(fmaxf(a.x, a.y), a.z); }
-FINLINE float Min3(float3 a) { return fminf(fminf(a.x, a.y), a.z); }
+FINLINE float Max3(const float3& a) { return fmaxf(fmaxf(a.x, a.y), a.z); }
+FINLINE float Min3(const float3& a) { return fminf(fminf(a.x, a.y), a.z); }
 
-inline Vector2f ToVector2f(const Vector2i& vec) { return Vector2f((float)vec.x, (float)vec.y); }
+FINLINE Vector2f ToVector2f(const Vector2i& vec) { return Vector2f((float)vec.x, (float)vec.y); }
 
-inline Vector2i ToVector2f(const Vector2f& vec) { return Vector2i((int)vec.x, (int)vec.y);  }
+FINLINE Vector2i ToVector2f(const Vector2f& vec) { return Vector2i((int)vec.x, (int)vec.y);  }

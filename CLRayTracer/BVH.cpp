@@ -4,44 +4,53 @@
 #include "ResourceManager.hpp"
 #include <exception>
 
-// done use tri.vertx.w as centeroid.x, use simd
-// todo binning again, fix SAH
+// use simd more
 
 struct aabb 
 { 
-	float3 bmin = 1e30f, bmax = -1e30f;
+	__m128 bmin, bmax;
 	
-	void grow(float3 p) 
+	aabb() : bmin(_mm_set1_ps(1e30f)), bmax(_mm_set_ps1(-1e30f)) {}
+
+	void grow(__m128 p)
 	{ 
-		bmin = fminf(bmin, p), bmax = fmaxf(bmax, p); 
+		bmin = _mm_min_ps(bmin, p), bmax = _mm_max_ps(bmax, p);
 	}
 
-	void grow(const Tri* tri) { 
-		bmin = fminf(bmin, tri->vertex0), bmax = fmaxf(bmax, tri->vertex0);
-		bmin = fminf(bmin, tri->vertex1), bmax = fmaxf(bmax, tri->vertex1); 
-		bmin = fminf(bmin, tri->vertex2), bmax = fmaxf(bmax, tri->vertex2); 
+	void grow(const Tri* tri) 
+	{ 
+		bmin = _mm_min_ps(bmin, tri->v0);
+		bmin = _mm_min_ps(bmin, tri->v1); 
+		bmin = _mm_min_ps(bmin, tri->v2);
+
+		bmax = _mm_max_ps(bmax, tri->v0);
+		bmax = _mm_max_ps(bmax, tri->v1);
+		bmax = _mm_max_ps(bmax, tri->v2);
 	}
 	
 	void grow(aabb other)
 	{
-		bmin = fminf(bmin, other.bmin), bmax = fmaxf(bmax, other.bmax);
+		if (SSEVectorGetX(other.bmin) != 1e30f)
+		{
+			bmin = _mm_min_ps(bmin, other.bmin);
+			bmax = _mm_max_ps(bmax, other.bmin);
+			bmin = _mm_min_ps(bmin, other.bmax);
+			bmax = _mm_max_ps(bmax, other.bmax);
+		}
 	}
 
 	float area() 
 	{ 
-		float3 e = bmax - bmin; // box extent
-		return e.x * e.y + e.y * e.z + e.z * e.x; 
+		__m128 e = _mm_sub_ps(bmax, bmin); // box extent
+		__m128 eSurface = _mm_and_ps(_mm_mul_ps(e, _mm_permute_ps(e, _MM_SHUFFLE(1, 2, 0, 0))), g_XMSelect1110);
+		return hsum_ps_sse3(eSurface);
 	}
-};
-
-struct Bin {
-	aabb bounds; uint triCount = 0;
 };
 
 static uint nodesUsed = 0;
 static BVHNode* nodes;
 
-#define GetCenteroid(tri, axis) *((&(tri)->centeroidx) + (axis * 4))
+#define GetCenteroid(tri, axis) SSEVectorGetW(*((__m128*)(tri) + axis)) 
 
 static void UpdateNodeBounds(BVHNode* bvhNode, const Tri* tris, uint nodeIdx)
 {
@@ -67,9 +76,9 @@ static void UpdateNodeBounds(BVHNode* bvhNode, const Tri* tris, uint nodeIdx)
 
 FINLINE float CalculateCost(const BVHNode* node)
 { 
-	float3 e = node->aabbMax - node->aabbMin;
-	float surfaceArea = e.x * e.y + e.y * e.z + e.z * e.x;
-	return node->triCount * surfaceArea;
+	__m128 e = _mm_sub_ps(node->maxv, node->minv); // box extent
+	__m128 eSurface = _mm_and_ps(_mm_mul_ps(e, _mm_permute_ps(e, _MM_SHUFFLE(1, 2, 0, 0))), g_XMSelect1110);
+	return node->triCount * hsum_ps_sse3(eSurface);
 }
 
 static float EvaluateSAH(const BVHNode* node, Tri* tris, int axis, float pos)
@@ -103,23 +112,23 @@ static float FindBestSplitPlane(const BVHNode* node, Tri* tris, int* outAxis, fl
 		
 		for (int i = 0; i < triCount; ++i)
 		{
-			Tri* triangle = tris + i;
+			Tri* triangle = tris + leftFirst + i;
 			float val = GetCenteroid(triangle, axis);
 			boundsMin = Min(boundsMin, val);
 			boundsMax = Max(boundsMax, val);
 		}
 
-		if (boundsMax == boundsMin) continue;
+		if (fabsf(boundsMax - boundsMin) < 0.001f) continue;
 
 		constexpr int BINS = 8;
+		struct Bin { aabb bounds; uint triCount = 0; };
 		Bin bin[BINS] = {};
 		float scale = float(BINS) / (boundsMax - boundsMin);
 		for (uint i = 0; i < triCount; i++)
 		{
 			Tri* triangle = tris + leftFirst + i;
 			float centeroid = GetCenteroid(triangle, axis);
-			int binIdx = Clamp((int)((centeroid - boundsMin) * scale), 0, BINS - 1);
-
+			int binIdx = Min(BINS - 1, (int)((centeroid - boundsMin) * scale));
 			bin[binIdx].triCount++;
 			bin[binIdx].bounds.grow(triangle);
 		}
@@ -154,27 +163,18 @@ static float FindBestSplitPlane(const BVHNode* node, Tri* tris, int* outAxis, fl
 	return bestCost;
 }
 
-
 static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 {
 	// terminate recursion
 	BVHNode* node = bvhNode + nodeIdx;
 	uint leftFirst = node->leftFirst, triCount = node->triCount;
-	if (triCount <= 2) return;
 	// determine split axis and position
-	// int axis;
-	// float splitPos;
-	// float splitCost = FindBestSplitPlane(node, tris, &axis, &splitPos);
-	// float nosplitCost = CalculateCost(node);
-	// 
-	// if (splitCost >= nosplitCost) return;
+	int axis;
+	float splitPos;
+	float splitCost = FindBestSplitPlane(node, tris, &axis, &splitPos);
+	float nosplitCost = CalculateCost(node);
 	
-	// // determine split axis and position
-	float3 extent = node->aabbMax - node->aabbMin; 
-	int axis = extent.y > extent.x;            // if (extent.y > extent.x) axis = 1; // premature optimization :D
-	axis = extent.z > extent[axis] ? 2 : axis; // if (extent.z > extent[axis]) axis = 2;
-	
-	float splitPos = node->aabbMin[axis] + extent[axis] * 0.5f;
+	if (splitCost >= nosplitCost) return;
 
 	// in-place partition
 	int i = leftFirst;
@@ -216,12 +216,14 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 	SubdivideBVH(bvhNode, tris, rightChildIdx);
 }
 
+#include "Timer.hpp"
+
 BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices, uint* _nodesUsed)
 {
 	// 1239.74ms SIMD
 	// 556.51ms  SIMD with custom swap
 	// 6511.79ms withut
-	// CSTIMER("BVH build Time ms: ");
+	CSTIMER("BVH build Time ms: ");
 	uint numTriangles = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		numTriangles += meshes[i].numTriangles;

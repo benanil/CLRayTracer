@@ -48,6 +48,7 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	char* mtlPath = _strdup(path);
 	size_t pathLen = strlen(path);
 	mtlPath[pathLen-1] = 'l'; mtlPath[pathLen-2] = 't'; mtlPath[pathLen-3] = 'm';
+	bool isSponza = path[pathLen - 5] == 'a' && path[pathLen - 6] == 'z' && path[pathLen - 7] == 'n';
 
 	if (!std::filesystem::exists(path)) {
 		AXERROR("mesh file is not exist!\n %c", path);
@@ -70,7 +71,7 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	if (msz) { // material path exist 
 		std::ifstream mtlFile(mtlPath, std::ios::in | std::ios::binary | std::ios::failbit);
 		SkipBOM(mtlFile);
-		mesh->textMem[msz] = '\0';
+		mesh->textMem[sz + msz] = '\0';
 		mtlFile.read(mesh->textMem + sz, msz);
 		mtlFile.close();
 	}
@@ -90,7 +91,7 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	float* currVertices = positions, *currTexCoords = texCoords;//, *currNormals = normals;
 	
 	// hashMap for material indices, materialMap[materialNameHash & 64] = material Index 
-	unsigned char materialMap[64] = {0};
+	unsigned char materialMap[128] = {0};
 	
 	// import materials
 	char* curr = mesh->textMem + sz + 1, *currEnd = curr + msz;
@@ -114,10 +115,10 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			while(*curr != '\n' && !IsWhitespace(*curr))
 				hash = ((hash << 5) + hash) + *curr++;
 			*curr++ = '\0'; // null terminator
-			if (materialMap[hash & 63])
-				AXERROR("mesh importing failed material hash collision detected!"), exit(0);
+			//if (materialMap[hash & 127])
+			//	AXERROR("mesh importing failed material hash collision detected!"), exit(0);
 
-			materialMap[hash & 63] = mesh->numMaterials++;
+			materialMap[hash & 127] = mesh->numMaterials++;
 		}
 		else if (curr[0] == 'N' && curr[1] == 's') { // shininess
 			curr = ParseFloat(&currMaterial->shininess, curr + 2);
@@ -164,8 +165,6 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 		if (*curr == '#')  while (*curr++ != '\n');
 		while (*curr == '\n' || IsWhitespace(*curr)) curr++;
 
-		// todo don't allocate memory for all triangles, evaluate it for each group instead
-
 		if (*curr == 'v')
 		{
 			while (curr[1] == ' ') { // vertex=position 
@@ -211,7 +210,7 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			while(*curr != '\n' && !IsWhitespace(*curr)) // create texture path hash 
 				hash = ((hash << 5) + hash) + *curr++;
 			while (*curr == '\n' || IsWhitespace(*curr)) curr++;
-			currentMaterial = materialMap[hash & 63]; // use material index for this group of triangles
+			currentMaterial = materialMap[hash & 127]; // use material index for this group of triangles
 		}
 		bool groupProcessed = 0;
 
@@ -248,13 +247,13 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			while (IsWhitespace(*curr) || *curr == '\n') curr++;
 		}
 
-		if (groupProcessed) { // we don't want to push all group triangles to  
-			groupOffset += numVertices;
-			groupOffsetTexture += numTexCoords;
-			numVertices = numTexCoords = 0;
-			currTexCoords = texCoords;
-			currVertices = positions;
-		}
+		//if (groupProcessed && !isSponza) { // we don't want to push all group triangles to  
+		//	groupOffset += numVertices;
+		//	groupOffsetTexture += numTexCoords;
+		//	numVertices = numTexCoords = 0;
+		//	currTexCoords = texCoords;
+		//	currVertices = positions;
+		//}
 
 		if (*curr == 'o' || *curr == 'm' || *curr == 's')  while (*curr++ != '\n'); // skip line, header is unknown|unused
 	}

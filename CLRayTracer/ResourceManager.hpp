@@ -2,6 +2,7 @@
 #include "cl.hpp"
 #include "Math/Vector.hpp"
 #include "Common.hpp"
+#include <immintrin.h>
 
 struct Texture {
 	int width, height, offset, padd;
@@ -9,8 +10,8 @@ struct Texture {
 
 AX_ALIGNED(16) struct BVHNode
 {
-	struct { float3 aabbMin; uint leftFirst; };
-	struct { float3 aabbMax; uint triCount; };
+	union { struct { float3 aabbMin; uint leftFirst; }; __m128 minv; };
+	union { struct { float3 aabbMax; uint triCount; };  __m128 maxv; };
 };
 
 struct MeshInfo {
@@ -40,9 +41,9 @@ typedef struct Sphere_t
 } Sphere;
 
 AX_ALIGNED(16) struct Tri { 
-	float3 vertex0; float centeroidx;
-	float3 vertex1; float centeroidy; 
-	float3 vertex2; float centeroidz;
+	union { struct {float3 vertex0; float centeroidx;};  __m128 v0; };
+	union { struct {float3 vertex1; float centeroidy;};  __m128 v1; };
+	union { struct {float3 vertex2; float centeroidz;};  __m128 v2; };
 
 	half uv0x, uv0y;
 	half uv1x, uv1y;

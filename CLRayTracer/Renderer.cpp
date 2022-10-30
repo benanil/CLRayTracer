@@ -190,7 +190,7 @@ int Renderer::Initialize()
 	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	MeshHandle nanosuitMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
+	MeshHandle nanosuitMesh = ResourceManager::ImportMesh("Assets/sibenik/sibenik.obj");
 	// MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
 
 	ResourceManager::PushMeshesToGPU(command_queue);
@@ -205,7 +205,7 @@ int Renderer::Initialize()
 
 	Random::PCG pcg{};
 
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < 1; ++i) {
 		RegisterMeshInstance(nanosuitMesh, ResourceManager::DefaultMaterial, float3(pcg.NextFloat01() * 20.0f, 1.2f, pcg.NextFloat01() * 20.0f));
 	}
 
@@ -299,7 +299,7 @@ void Renderer::Render()
 	camera.Update();
 	float time = Window::GetTime();
 
-	if (Window::IsFocused() && camera.wasPressing) 
+	if (true)//Window::IsFocused()) // && camera.wasPressing
 	{
 		if (shouldUpdateInstances)
 		{
