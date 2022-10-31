@@ -37,7 +37,7 @@ struct Camera
 	Camera() {}
 
 	Camera(Vector2i xviewPortSize)
-	: viewportSize(xviewPortSize), position(0.0f,3.0f, 20.0f), targetPosition(0.0f,0.0f,-5.0f), Front(0.0f,0.0f,1.0f)
+	: viewportSize(xviewPortSize), position(0.0f,3.0f, 20.0f), targetPosition(0.0f,0.0f,-5.0f), Front(0.0f,0.0f,-1.0f)
 	{
 		monitorSize = Window::GetMonitorScale();
 		RecalculateProjection(xviewPortSize.x, xviewPortSize.y);
@@ -61,7 +61,7 @@ struct Camera
 		if (!pressing) { wasPressing = false; return; }
 
 		float dt = (float)Window::DeltaTime();
-		float speed = dt * (1.0f + Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
+		float speed = dt * (1.0f + Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f) * 2.0f;
 
 		const Vector2f mousePos = ToVector2f(Window::GetMouseScreenPos());
 		Vector2f diff = mousePos - mouseOld;

@@ -24,10 +24,11 @@ struct MeshInfo {
 // values and we will be able to change properties for different mesh instances
 #pragma pack(1)
 struct Material {
-	uint color; 
-	uint albedoTextureIndex;
-	uint specularTextureIndex;  
-	float shininess;
+	uint color;
+	uint specularColor;
+	ushort albedoTextureIndex;
+	ushort specularTextureIndex;  
+	half shininess, roughness;
 };
 
 #pragma pack(1)
@@ -40,6 +41,7 @@ typedef struct Sphere_t
 	float rotationx, rotationy;
 } Sphere;
 
+#pragma pack(1)
 AX_ALIGNED(16) struct Tri { 
 	union { struct {float3 vertex0; float centeroidx;};  __m128 v0; };
 	union { struct {float3 vertex1; float centeroidy;};  __m128 v1; };
@@ -48,10 +50,13 @@ AX_ALIGNED(16) struct Tri {
 	half uv0x, uv0y;
 	half uv1x, uv1y;
 	half uv2x, uv2y;
-	int materialIndex;
+	ushort materialIndex;
+	half normal0x, normal0y, normal0z;
+	half normal1x, normal1y, normal1z;
+	half normal2x, normal2y, normal2z;
 };
 
-static_assert(sizeof(Tri) == 64);
+static_assert(sizeof(Tri) == (64 + sizeof(__m128)));
 
 typedef ushort TextureHandle;
 typedef ushort MeshHandle;

@@ -4,7 +4,7 @@
 struct ObjMaterial {
 	char* name;
 	unsigned diffuseColor, specularColor;
-	float shininess;
+	float shininess, roughness;
 	char* diffusePath, *specularPath;
 };
 

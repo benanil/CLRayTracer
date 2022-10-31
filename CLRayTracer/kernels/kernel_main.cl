@@ -2,6 +2,8 @@
 // Anilcan Gulkaya 10/03/2022
 // #include "MathAndSTL.cl"
 
+// todo seperate 
+
 // ---- STRUCTURES ----
 
 typedef struct _TraceArgs{
@@ -30,15 +32,19 @@ typedef struct _HitRecord {
 
 typedef struct _Material {
 	uint color; 
-	uint albedoTextureIndex;
-	uint specularTextureIndex;  
-	float shininess;
+	uint specularColor;
+	ushort albedoTextureIndex;
+	ushort specularTextureIndex;  
+	half shininess, roughness;
 } Material;
 
 typedef struct _Triangle {
 	float3 x, y, z; // triangle positions
 	half2 uv0, uv1, uv2;
-	int materialIndex;
+	ushort materialIndex;
+	half normal0[3];
+	half normal1[3];
+	half normal2[3];
 } Triangle;
 
 typedef struct _Triout {
@@ -200,22 +206,24 @@ kernel void Trace(
 	const int i = get_global_id(0), j = get_global_id(1);
 	
 	// assert
-	if (sizeof(Triangle) != 64) {
-		return write_imagef(screen, (int2)(i, j), (float4)(0.5f));
+	if (sizeof(Triangle) != 64 + (16)) {
+		return write_imagef(screen, (int2)(i, j), (float4)(0.5f, 0.0f, 0.0f, 1.0f));
 	}
 
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
 	
-	float3 lightDir = (float3)(sin(1.2f), cos(-1.2f), 0.0f); // sun dir
+	float3 lightDir = (float3)(0.0f, sin(331.01), cos(331.01)); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
-	float atmosphericLight = 0.4f;
+	float3 atmosphericLight = (float3)(0.30f, 0.25f, 0.35f) * 0.2f;
 
-	for (int j = 0; j < 1; ++j)// num bounces
+	for (int j = 0; j < 2; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
 		HitRecord record = CreateHitRecord();
 		float roughness = 0.5f; // plane roughness
+		float shininess = 3.0f;
+		float3 specularColor = (float3)(0.8f, 0.7f, 0.6f);
 		// find intersectedsphere
 		for (int i = 0; i < trace_args.numSpheres; ++i)  {
 			IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
@@ -235,7 +243,6 @@ kernel void Trace(
 
 			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
 			record.color.xyz = color * UNPACK_RGB8(pixel);
-			roughness = 0.5f;// currentSphere.shininess;
 		}
 
 		Ray meshRay;
@@ -253,28 +260,31 @@ kernel void Trace(
 			if (IntersectBVH(meshRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
 			{
 				Triangle triangle = triangles[triout.triIndex];
-				record.point = meshRay.origin + triout.t * meshRay.direction;
-				record.normal = fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x)); // maybe precalculate
 				Material material = materials[instance.materialStart + triangle.materialIndex];
-				
-				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
-				
-				half2 uv =  triangle.uv0 * convert_half(baryCentrics.x) 
-					      + triangle.uv1 * convert_half(baryCentrics.y)
-					      + triangle.uv2 * convert_half(baryCentrics.z);
+				half3 baryCentrics = (half3)(1.0f - triout.u - triout.v, triout.u, triout.v);
 
+				record.point = meshRay.origin + triout.t * meshRay.direction;
+				record.normal = convert_float3( // fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x));
+					              vload3(0, triangle.normal0) * baryCentrics.x
+				                + vload3(0, triangle.normal1) * baryCentrics.y
+								+ vload3(0, triangle.normal2) * baryCentrics.z);
+
+				half2 uv =  triangle.uv0 * baryCentrics.x 
+					      + triangle.uv1 * baryCentrics.y
+					      + triangle.uv2 * baryCentrics.z;
+				
 				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
-				// uint pixel = WangHash(triangle.materialIndex * (triangle.materialIndex << 8) +
-				//                       (triangle.materialIndex << 16));
+				// uint pixel = WangHash(triangle.materialIndex * (triangle.materialIndex << 8) + (triangle.materialIndex << 16));
 
 				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
+				specularColor = UnpackRGB8u(material.specularColor);
 				besthit.distance = triout.t;	
-				roughness = 0.5f; // material.roughness;
+				roughness = convert_float(material.roughness);
+				shininess = convert_float(material.shininess);
 			}
-		}
+		}	
 		
-		if (besthit.distance > InfMinusOne) 
-		{
+		if (besthit.distance > InfMinusOne) {
 			RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
 			float3 skybox_sample = UNPACK_RGB8(pixel);			
 			result += skybox_sample * energy;
@@ -292,16 +302,18 @@ kernel void Trace(
 		// todo shadow for only directional light
 	
 		// Shade
-		float ndl = fmax(dot(record.normal, -lightDir), atmosphericLight);
-		atmosphericLight *= 0.4f;
+		float ndl = fmax(dot(record.normal, -lightDir), 0.0f);
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); 
-	
-		result += energy * (record.color * ndl);
+		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess); // meshray direction = wi
+		float3 ambient = (1.0f - ndl) * atmosphericLight;
+
+		result += energy * (record.color * ndl) + ambient + specularLighting;
 		energy *= specular;
+		atmosphericLight *= 0.4f;
 		
 		lightDir = ray.direction;
 	}
-	result = Saturation(result, 1.2f) * 1.1f;
+	result = Saturation(result, 1.2f);
 	result = ACESFilm(result);
 
 	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 1.0f));

@@ -22,7 +22,6 @@ struct aabb
 		bmin = _mm_min_ps(bmin, tri->v0);
 		bmin = _mm_min_ps(bmin, tri->v1); 
 		bmin = _mm_min_ps(bmin, tri->v2);
-
 		bmax = _mm_max_ps(bmax, tri->v0);
 		bmax = _mm_max_ps(bmax, tri->v1);
 		bmax = _mm_max_ps(bmax, tri->v2);
@@ -67,7 +66,7 @@ static void UpdateNodeBounds(BVHNode* bvhNode, const Tri* tris, uint nodeIdx)
     	nodeMax = _mm_max_ps(nodeMax, leafPtr[0]);
     	nodeMax = _mm_max_ps(nodeMax, leafPtr[1]);
     	nodeMax = _mm_max_ps(nodeMax, leafPtr[2]);
-    	leafPtr += 4; // +3 for vertex + 1 for texcoords
+    	leafPtr += 5; // +3 for vertexPositions + 1 for (texcoords + material index) + 1 for normals
     }
     
     SSEStoreVector3(&node->aabbMin.x, nodeMin);
@@ -118,7 +117,7 @@ static float FindBestSplitPlane(const BVHNode* node, Tri* tris, int* outAxis, fl
 			boundsMax = Max(boundsMax, val);
 		}
 
-		if (fabsf(boundsMax - boundsMin) < 0.001f) continue;
+		if (boundsMax == boundsMin) continue;
 
 		constexpr int BINS = 8;
 		struct Bin { aabb bounds; uint triCount = 0; };
@@ -189,11 +188,11 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 			__m128* b = (__m128*)(tris + j);
 			
 			__m128 t = *a;
-			*a++ = *b, *b++ = t, t = *a; // swap a[0], b[0] 
-			*a++ = *b, *b++ = t, t = *a; // swap a[1], b[1]
-			*a++ = *b, *b++ = t, t = *a; // swap a[2], b[2]
-			*a = *b, *b = t;             // swap a[3], b[3]
-			
+			*a++ = *b, *b++ = t, t = *a; // swap a[0], b[0] vertex0
+			*a++ = *b, *b++ = t, t = *a; // swap a[1], b[1] vertex1
+			*a++ = *b, *b++ = t, t = *a; // swap a[2], b[2] vertex2
+			*a++ = *b, *b++ = t, t = *a; // swap a[3], b[3] uv's + material index + normal0x
+			*a = *b, *b = t;             // swap a[5], b[5] normals
 			j--;
 		}
 	}

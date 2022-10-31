@@ -39,7 +39,7 @@ inline char* ParseFloat(float* f, char* __restrict ptr)
 		fra = 10.0f * fra + (double)(*ptr++ - '0'), div *= 10.0f;
 	
 	num += fra / div;
-	*f = sign * num;
+	*f = (float)(sign * num);
 	return ptr;
 }
 
@@ -83,15 +83,15 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	// todo use arena allocator or some part of the .obj text data
 	float* positions  = (float*)malloc(1024 * sizeof(float3));
 	float* texCoords = (float*)malloc(1024 * sizeof(float2));
-	// float* normals   = (float*)malloc(1024 * sizeof(float) * 3); // todo
+	float* normals   = (float*)malloc(1024 * sizeof(float3)); // todo
 
-	int numVertices = 0, numTexCoords = 0;//numNormals = 0;
+	int numVertices = 0, numTexCoords = 0, numNormals = 0;
 
-	int sizeVertices = 1024, sizeTexCoords = 1024;//, sizeNormals = 1024; // size of the arrays 
-	float* currVertices = positions, *currTexCoords = texCoords;//, *currNormals = normals;
+	int sizeVertices = 1024, sizeTexCoords = 1024, sizeNormals = 1024; // size of the arrays 
+	float* currVertices = positions, *currTexCoords = texCoords, *currNormals = normals;
 	
-	// hashMap for material indices, materialMap[materialNameHash & 64] = material Index 
-	unsigned char materialMap[128] = {0};
+	// hashMap for material indices, materialMap[materialNameHash & 255] = material Index 
+	unsigned char materialMap[512] = {0};
 	
 	// import materials
 	char* curr = mesh->textMem + sz + 1, *currEnd = curr + msz;
@@ -108,20 +108,23 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			currMaterial = mesh->materials + mesh->numMaterials;
 			// set default properties
 			currMaterial->specularColor = ~0u, currMaterial->diffuseColor = ~0u;
-			currMaterial->shininess = 0.5f;
+			currMaterial->shininess = 3.0f, currMaterial->roughness = 0.65f;
 			currMaterial->diffusePath = nullptr, currMaterial->specularPath = nullptr;
 			currMaterial->name = curr;
 			unsigned hash = 5381;
 			while(*curr != '\n' && !IsWhitespace(*curr))
-				hash = ((hash << 5) + hash) + *curr++;
+				hash = *curr++ + (hash << 6) + (hash << 16) - hash ^ 0b1010101010101010101010101010101u; // dellendik fittirdik anca boyle collision'dan kurtuldum
 			*curr++ = '\0'; // null terminator
-			//if (materialMap[hash & 127])
-			//	AXERROR("mesh importing failed material hash collision detected!"), exit(0);
+			if (materialMap[hash & 511])
+				AXERROR("mesh importing failed material hash collision detected!"), exit(0);
 
-			materialMap[hash & 127] = mesh->numMaterials++;
+			materialMap[hash & 511] = mesh->numMaterials++;
 		}
 		else if (curr[0] == 'N' && curr[1] == 's') { // shininess
 			curr = ParseFloat(&currMaterial->shininess, curr + 2);
+		}
+		else if (curr[0] == 'd') { // roughness
+			curr = ParseFloat(&currMaterial->roughness, curr + 2);
 		}
 		else if (curr[0] == 'K' && curr[1] == 'd') { // diffuse color
 			float colorf[3];
@@ -158,7 +161,6 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 
 	curr = mesh->textMem, currEnd = curr + sz;
 	unsigned currentMaterial = 0;
-	unsigned groupOffset = 1, groupOffsetTexture = 1;
 
 	while (curr && *curr && curr < currEnd)
 	{
@@ -197,9 +199,18 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			}
 
 			while (curr[1] == 'n') {
-				// skip normals for now
-				while (*curr++ != '\n'); // skip line
-				while (IsWhitespace(*curr)) curr++;
+				curr += 2; 
+				if (numNormals + 1 >= sizeNormals) {
+					sizeNormals += sizeNormals / 2;
+					normals = (float*)realloc(normals, sizeNormals * sizeof(float3));
+					currNormals = normals + (numNormals * 3);
+				}
+			
+				curr = ParseFloat(currNormals++, curr); 
+				curr = ParseFloat(currNormals++, curr); 
+				curr = ParseFloat(currNormals++, curr); numNormals++;
+				// skip line&whiteSpace
+				while (*curr == '\n' || IsWhitespace(*curr)) curr++;
 			}
 		} 
 		
@@ -208,15 +219,13 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			curr += 7; // skip usemtl + space
 			unsigned hash = 5381;
 			while(*curr != '\n' && !IsWhitespace(*curr)) // create texture path hash 
-				hash = ((hash << 5) + hash) + *curr++;
+				hash = *curr++ + (hash << 6) + (hash << 16) - hash ^ 0b1010101010101010101010101010101u;
 			while (*curr == '\n' || IsWhitespace(*curr)) curr++;
-			currentMaterial = materialMap[hash & 127]; // use material index for this group of triangles
+			currentMaterial = materialMap[hash & 511]; // use material index for this group of triangles
 		}
-		bool groupProcessed = 0;
 
 		while (curr[0] == 'f')
 		{
-			groupProcessed = true;
 			curr += 2;
 			int vtn = 0; // number of indices = vertex, texture and normal v, vt, vtn?
 			Tri* tri = mesh->tris + mesh->numTris; mesh->numTris++;
@@ -226,19 +235,23 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 
 			float* vertPtr = (float*)tri; 
 			half* texCoordPtr = &tri->uv0x;
+			half* normalPtr = &tri->normal0x;
 
-			for(int i = 0; i < 3; ++i, texCoordPtr += 2, vertPtr += 4) // compiler please unroll :D
+			for(int i = 0; i < 3; ++i, texCoordPtr += 2, vertPtr += 4, normalPtr += 3) // compiler please unroll :D
 			{
 				int positionIdx = 0, textureIdx = 0, normalIdx = 0;
 				// since we know indices are not negative values we are parsing like this
 				while (IsNumber(*curr)) positionIdx = 10 * positionIdx + (*curr++ - '0'); curr++; // last ptr++ for jump '/'
 				while (IsNumber(*curr)) textureIdx = 10 * textureIdx + (*curr++ - '0'); curr++;
-				while (IsNumber(*curr)) curr++; curr++;// normalIdx = 10 * curr + (*ptr++ - '0'); ptr++; // no normal yet but its here for now
+				while (IsNumber(*curr)) normalIdx = 10 * normalIdx + (*curr++ - '0'); curr++;
 			
-				positionIdx -= groupOffset, textureIdx -= groupOffsetTexture; // obj index always starts from 1
+				positionIdx--, textureIdx--, normalIdx--;// obj index always starts from 1
 				std::memcpy(vertPtr, positions + (positionIdx * 3), sizeof(float3));
 				texCoordPtr[0] = ConvertFloatToHalf(texCoords[textureIdx * 2 + 0]);
 				texCoordPtr[1] = ConvertFloatToHalf(1.0f - texCoords[textureIdx * 2 + 1]);
+				normalPtr[0] = ConvertFloatToHalfSafe(normals[normalIdx * 3 + 0]);
+				normalPtr[1] = ConvertFloatToHalfSafe(normals[normalIdx * 3 + 1]);
+				normalPtr[2] = ConvertFloatToHalfSafe(normals[normalIdx * 3 + 2]);
 			}
 
 			tri->materialIndex = currentMaterial;
@@ -247,17 +260,9 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			while (IsWhitespace(*curr) || *curr == '\n') curr++;
 		}
 
-		//if (groupProcessed && !isSponza) { // we don't want to push all group triangles to  
-		//	groupOffset += numVertices;
-		//	groupOffsetTexture += numTexCoords;
-		//	numVertices = numTexCoords = 0;
-		//	currTexCoords = texCoords;
-		//	currVertices = positions;
-		//}
-
 		if (*curr == 'o' || *curr == 'm' || *curr == 's')  while (*curr++ != '\n'); // skip line, header is unknown|unused
 	}
-	free(positions), free(texCoords);
+	free(positions), free(texCoords), free(normals);
 	printf("done");
 	return mesh;
 }

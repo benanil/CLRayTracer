@@ -190,7 +190,7 @@ int Renderer::Initialize()
 	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	MeshHandle nanosuitMesh = ResourceManager::ImportMesh("Assets/sibenik/sibenik.obj");
+	MeshHandle bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
 	// MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
 
 	ResourceManager::PushMeshesToGPU(command_queue);
@@ -205,9 +205,7 @@ int Renderer::Initialize()
 
 	Random::PCG pcg{};
 
-	for (int i = 0; i < 1; ++i) {
-		RegisterMeshInstance(nanosuitMesh, ResourceManager::DefaultMaterial, float3(pcg.NextFloat01() * 20.0f, 1.2f, pcg.NextFloat01() * 20.0f));
-	}
+	RegisterMeshInstance(bmwMesh, ResourceManager::DefaultMaterial, float3(0.0f, 0.2f, 0.0f));
 
 	EndInstanceRegister();
 	// create random sphere positions&colors
@@ -299,7 +297,7 @@ void Renderer::Render()
 	camera.Update();
 	float time = Window::GetTime();
 
-	if (true)//Window::IsFocused()) // && camera.wasPressing
+	if (Window::IsFocused() && camera.wasPressing) 
 	{
 		if (shouldUpdateInstances)
 		{

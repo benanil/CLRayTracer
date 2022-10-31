@@ -149,7 +149,8 @@ void ResourceManager::PrepareMeshes() {
 	meshArenaOffset = 0;
 	Material* firstMaterial = materials + 0;
 	firstMaterial->color = 0x00FF0000u | (80 << 16) | (55);
-	firstMaterial->shininess = 0.5f;
+	firstMaterial->specularColor = 250 | (228 << 8) | (210 << 16);
+	firstMaterial->shininess = ConvertFloatToHalf(3.0f), firstMaterial->roughness = ConvertFloatToHalf(0.8f);
 	firstMaterial->albedoTextureIndex = 0u; firstMaterial->specularTextureIndex = 1u; numMaterials++;
 }
 
@@ -182,10 +183,12 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 	for (int i = 0; i < mesh->numMaterials; ++i)
 	{
 		ObjMaterial& material = mesh->materials[i];
-		AXLOG("material name: %s", material.name);
 		// todo store name etc. in somewhere else for showing it on gui	
 		materials[numMaterials].color = material.diffuseColor;
-		materials[numMaterials].shininess = material.shininess;
+		materials[numMaterials].specularColor = material.specularColor;
+		materials[numMaterials].shininess = ConvertFloatToHalf(material.shininess);
+		materials[numMaterials].roughness = ConvertFloatToHalf(material.roughness);
+		
 		char* albedoTexture = material.diffusePath;
 		materials[numMaterials].albedoTextureIndex = albedoTexture ? ImportTexture(albedoTexture) : 0;
 	
