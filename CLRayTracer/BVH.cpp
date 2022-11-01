@@ -109,7 +109,7 @@ static float FindBestSplitPlane(const BVHNode* node, Tri* tris, int* outAxis, fl
 	{
 		float boundsMin = 1e30f, boundsMax = -1e30f;
 		
-		for (int i = 0; i < triCount; ++i)
+		for (uint i = 0; i < triCount; ++i)
 		{
 			Tri* triangle = tris + leftFirst + i;
 			float val = GetCenteroid(triangle, axis);
@@ -223,7 +223,7 @@ BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, ui
 	// 556.51ms  SIMD with custom swap
 	// 6511.79ms withut
 	CSTIMER("BVH build Time ms: ");
-	uint numTriangles = 0;
+	int numTriangles = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		numTriangles += meshes[i].numTriangles;
 	}
@@ -236,7 +236,7 @@ BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, ui
 		tri->centeroidy = (tri->vertex0.y + tri->vertex1.y + tri->vertex2.y) * 0.333333f;
 		tri->centeroidz = (tri->vertex0.z + tri->vertex1.z + tri->vertex2.z) * 0.333333f;
 	}
-	uint currTriangle = 0;
+	int currTriangle = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		// assign all triangles to root node
 		uint rootNodeIndex = nodesUsed++;

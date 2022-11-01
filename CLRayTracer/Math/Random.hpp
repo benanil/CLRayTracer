@@ -27,7 +27,7 @@ namespace Random
 
 		float NextFloat(float min, float max)
 		{
-			return min + (NextFloat01() * fabs(min - max));
+			return min + (NextFloat01() * fabsf(min - max));
 		}
 		float NextFloat01()
 		{

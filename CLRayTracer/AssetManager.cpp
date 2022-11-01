@@ -1,34 +1,23 @@
+
+#include "AssetManager.hpp"
 #include "CLHelper.hpp"
 #include <fstream>
 #include <filesystem>
 #include "Logger.hpp"
-#include "ResourceManager.hpp"
-
-static void SkipBOM(std::ifstream& in)
-{
-	char test[3] = { 0 };
-	in.read(test, 3);
-	if ((unsigned char)test[0] == 0xEF &&
-		(unsigned char)test[1] == 0xBB &&
-		(unsigned char)test[2] == 0xBF) {
-		return;
-	}
-	in.seekg(0);
-}
 
 FINLINE bool IsNumber(const char c) { return c <= '9' && c >= '0'; }
-FINLINE bool IsWhitespace(char c)   { return (c == ' ' || c == '\t' || c == '\r'); }
+FINLINE bool IsWhitespace(char c) { return (c == ' ' || c == '\t' || c == '\r'); }
 
 inline char* ParseFloat(float* f, char* __restrict ptr)
 {
 	while (IsWhitespace(*ptr)) ptr++;
-	
+
 	double sign = 1.0;
-	if(*ptr == '-') sign = -1.0, ptr++; 
+	if (*ptr == '-') sign = -1.0, ptr++;
 
 	double num = 0.0;
 
-	while (IsNumber(*ptr)) 
+	while (IsNumber(*ptr))
 		num = 10.0 * num + (double)(*ptr++ - '0');
 
 	if (*ptr == '.') ptr++;
@@ -37,17 +26,16 @@ inline char* ParseFloat(float* f, char* __restrict ptr)
 
 	while (IsNumber(*ptr))
 		fra = 10.0f * fra + (double)(*ptr++ - '0'), div *= 10.0f;
-	
+
 	num += fra / div;
 	*f = (float)(sign * num);
 	return ptr;
 }
 
-ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
+static ObjMesh* ImportObj(const char* path, char* mtlPath, Tri* triArena)
 {
-	char* mtlPath = _strdup(path);
 	size_t pathLen = strlen(path);
-	mtlPath[pathLen-1] = 'l'; mtlPath[pathLen-2] = 't'; mtlPath[pathLen-3] = 'm';
+	mtlPath[pathLen - 1] = 'l'; mtlPath[pathLen - 2] = 't'; mtlPath[pathLen - 3] = 'm';
 	bool isSponza = path[pathLen - 5] == 'a' && path[pathLen - 6] == 'z' && path[pathLen - 7] == 'n';
 
 	if (!std::filesystem::exists(path)) {
@@ -56,9 +44,9 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	}
 
 	std::ifstream meshFile(path, std::ios::in | std::ios::binary | std::ios::failbit);
-	SkipBOM(meshFile); 
-	
-	ObjMesh* mesh = new ObjMesh; 
+	SkipBOM(meshFile);
+
+	ObjMesh* mesh = new ObjMesh;
 	mesh->numMaterials = 0, mesh->numTris = 0;
 	mesh->tris = triArena;
 
@@ -66,10 +54,12 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	uintmax_t msz = std::filesystem::exists(mtlPath) ? std::filesystem::file_size(mtlPath) : 0;
 
 	mesh->textMem = new char[sz + 1 + msz + 1]; // we delete this after we destroy the obj
+	mesh->textMem[sz] = '\0';
 
 	if (msz) { // material path exist 
 		std::ifstream mtlFile(mtlPath, std::ios::in | std::ios::binary | std::ios::failbit);
 		SkipBOM(mtlFile);
+		mesh->textMem[sz + msz] = '\0';
 		mtlFile.read(mesh->textMem + sz, msz);
 		mtlFile.close();
 	}
@@ -79,27 +69,27 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	free(mtlPath); // path text
 	// todo string pool
 	// todo use arena allocator or some part of the .obj text data
-	float* positions  = (float*)malloc(1024 * sizeof(float3));
+	float* positions = (float*)malloc(1024 * sizeof(float3));
 	float* texCoords = (float*)malloc(1024 * sizeof(float2));
-	float* normals   = (float*)malloc(1024 * sizeof(float3)); // todo
+	float* normals = (float*)malloc(1024 * sizeof(float3)); // todo
 
 	int numVertices = 0, numTexCoords = 0, numNormals = 0;
 
 	int sizeVertices = 1024, sizeTexCoords = 1024, sizeNormals = 1024; // size of the arrays 
-	float* currVertices = positions, *currTexCoords = texCoords, *currNormals = normals;
-	
+	float* currVertices = positions, * currTexCoords = texCoords, * currNormals = normals;
+
 	// hashMap for material indices, materialMap[materialNameHash & 255] = material Index 
-	unsigned char materialMap[512] = {0};
-	
+	unsigned char materialMap[512] = { 0 };
+
 	// import materials
-	char* curr = mesh->textMem + sz + 1, *currEnd = curr + msz;
+	char* curr = mesh->textMem + sz + 1, * currEnd = curr + msz;
 	ObjMaterial* currMaterial;
 
 	while (curr && *curr && curr < currEnd)
 	{
 		if (*curr == '#')  while (*curr++ != '\n'); // skip line
 		while (*curr == '\n' || IsWhitespace(*curr)) curr++;
-		
+
 		if (curr[0] == 'n' && curr[1] == 'e' && curr[2] == 'w') // no need to m, t, l 
 		{
 			curr += 7; // skip newmtl + space
@@ -110,7 +100,7 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			currMaterial->diffusePath = nullptr, currMaterial->specularPath = nullptr;
 			currMaterial->name = curr;
 			unsigned hash = 5381;
-			while(*curr != '\n' && !IsWhitespace(*curr))
+			while (*curr != '\n' && !IsWhitespace(*curr))
 				hash = *curr++ + (hash << 6) + (hash << 16) - hash ^ 0b1010101010101010101010101010101u; // dellendik fittirdik anca boyle collision'dan kurtuldum
 			*curr++ = '\0'; // null terminator
 			if (materialMap[hash & 511])
@@ -119,15 +109,10 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			materialMap[hash & 511] = mesh->numMaterials++;
 		}
 		else if (curr[0] == 'N' && curr[1] == 's') { // shininess
-			float f;
-			curr = ParseFloat(&f, curr + 2);
-			f = Clamp(f, 0.0f, 100.0f) / 100.0f;
-			currMaterial->shininess = (ushort)(f * 65000.0f);
+			curr = ParseFloat(&currMaterial->shininess, curr + 2);
 		}
 		else if (curr[0] == 'd') { // roughness
-			float f;
-			curr = ParseFloat(&f, curr + 2);
-			currMaterial->roughness = (ushort)(Clamp(f, 0.0f, 1.0f) * 65000.0f);
+			curr = ParseFloat(&currMaterial->roughness, curr + 2);
 		}
 		else if (curr[0] == 'K' && curr[1] == 'd') { // diffuse color
 			float colorf[3];
@@ -173,15 +158,15 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 		if (*curr == 'v')
 		{
 			while (curr[1] == ' ') { // vertex=position 
-				curr += 2; 
+				curr += 2;
 				if (numVertices + 1 >= sizeVertices) {
 					sizeVertices += sizeVertices / 2;
 					positions = (float*)realloc(positions, sizeVertices * sizeof(float3));
 					currVertices = positions + (numVertices * 3);
 				}
-			
-				curr = ParseFloat(currVertices++, curr); 
-				curr = ParseFloat(currVertices++, curr); 
+
+				curr = ParseFloat(currVertices++, curr);
+				curr = ParseFloat(currVertices++, curr);
 				curr = ParseFloat(currVertices++, curr); numVertices++;
 				// skip line&whiteSpace
 				while (*curr == '\n' || IsWhitespace(*curr)) curr++;
@@ -194,34 +179,34 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 					texCoords = (float*)realloc(texCoords, sizeTexCoords * sizeof(float2));
 					currTexCoords = texCoords + (numTexCoords * 2);
 				}
-			
-				curr = ParseFloat(currTexCoords++, curr); 
+
+				curr = ParseFloat(currTexCoords++, curr);
 				curr = ParseFloat(currTexCoords++, curr); numTexCoords++;
 				// skip line&whiteSpace
 				while (*curr == '\n' || IsWhitespace(*curr)) curr++;
 			}
 
 			while (curr[1] == 'n') {
-				curr += 2; 
+				curr += 2;
 				if (numNormals + 1 >= sizeNormals) {
 					sizeNormals += sizeNormals / 2;
 					normals = (float*)realloc(normals, sizeNormals * sizeof(float3));
 					currNormals = normals + (numNormals * 3);
 				}
-			
-				curr = ParseFloat(currNormals++, curr); 
-				curr = ParseFloat(currNormals++, curr); 
+
+				curr = ParseFloat(currNormals++, curr);
+				curr = ParseFloat(currNormals++, curr);
 				curr = ParseFloat(currNormals++, curr); numNormals++;
 				// skip line&whiteSpace
 				while (*curr == '\n' || IsWhitespace(*curr)) curr++;
 			}
-		} 
-		
+		}
+
 		if (curr[0] == 'u' && curr[1] == 's' && curr[2] == 'e') // && curr[3] == 'm' && curr[4] == 't' no need
 		{
 			curr += 7; // skip usemtl + space
 			unsigned hash = 5381;
-			while(*curr != '\n' && !IsWhitespace(*curr)) // create texture path hash 
+			while (*curr != '\n' && !IsWhitespace(*curr)) // create texture path hash 
 				hash = *curr++ + (hash << 6) + (hash << 16) - hash ^ 0b1010101010101010101010101010101u;
 			while (*curr == '\n' || IsWhitespace(*curr)) curr++;
 			currentMaterial = materialMap[hash & 511]; // use material index for this group of triangles
@@ -236,29 +221,29 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			if (mesh->numTris >= 1'000'000) // ResourceManager::Max_Triangles
 				AXERROR("too many triangles for mesh!"), exit(0);
 
-			float* vertPtr = (float*)tri; 
-			short* texCoordPtr = &tri->uv0x;
-			short* normalPtr = &tri->normal0x;
+			float* vertPtr = (float*)tri;
+			half* texCoordPtr = &tri->uv0x;
+			half* normalPtr = &tri->normal0x;
 
-			for(int i = 0; i < 3; ++i, texCoordPtr += 2, vertPtr += 4, normalPtr += 3) // compiler please unroll :D
+			for (int i = 0; i < 3; ++i, texCoordPtr += 2, vertPtr += 4, normalPtr += 3) // compiler please unroll :D
 			{
 				int positionIdx = 0, textureIdx = 0, normalIdx = 0;
 				// since we know indices are not negative values we are parsing like this
 				while (IsNumber(*curr)) positionIdx = 10 * positionIdx + (*curr++ - '0'); curr++; // last ptr++ for jump '/'
 				while (IsNumber(*curr)) textureIdx = 10 * textureIdx + (*curr++ - '0'); curr++;
 				while (IsNumber(*curr)) normalIdx = 10 * normalIdx + (*curr++ - '0'); curr++;
-			
+
 				positionIdx--, textureIdx--, normalIdx--;// obj index always starts from 1
 				std::memcpy(vertPtr, positions + (positionIdx * 3), sizeof(float3));
-				texCoordPtr[0] = short(texCoords[textureIdx * 2 + 0] * 32766.0f);
-				texCoordPtr[1] = short((1.0f - texCoords[textureIdx * 2 + 1]) * 32766.0f);
-				normalPtr[0] = short(normals[normalIdx * 3 + 0] * 32766.0f);
-				normalPtr[1] = short(normals[normalIdx * 3 + 1] * 32766.0f);
-				normalPtr[2] = short(normals[normalIdx * 3 + 2] * 32766.0f);
+				texCoordPtr[0] = ConvertFloatToHalf(texCoords[textureIdx * 2 + 0]);
+				texCoordPtr[1] = ConvertFloatToHalf(1.0f - texCoords[textureIdx * 2 + 1]);
+				normalPtr[0] = ConvertFloatToHalfSafe(normals[normalIdx * 3 + 0]);
+				normalPtr[1] = ConvertFloatToHalfSafe(normals[normalIdx * 3 + 1]);
+				normalPtr[2] = ConvertFloatToHalfSafe(normals[normalIdx * 3 + 2]);
 			}
 
 			tri->materialIndex = currentMaterial;
-			
+
 			// skip line&whiteSpace
 			while (IsWhitespace(*curr) || *curr == '\n') curr++;
 		}
@@ -270,56 +255,23 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 	return mesh;
 }
 
-void Helper::DestroyObj(ObjMesh* mesh) 
+ObjMesh* ImportCLM(const char* path, Tri* triArena)
 {
-	delete[] mesh->textMem; 
+	
+}
+
+ObjMesh* AssetManager::ImportMesh(const char* path, Tri* triArena)
+{
+	char* clmPath = _strdup(path);
+	if (std::filesystem::exists(clmPath))
+	{
+		
+	}
+}
+
+void AssetManager::DestroyObj(ObjMesh* mesh)
+{
+	delete[] mesh->textMem;
 	delete mesh;
 	// _aligned_free(mesh->tris);
-}
-
-char* Helper::ReadAllText(const char* path)
-{
-	if (!std::filesystem::exists(path)) {
-		AXERROR("file is not exist!\n %c", path);
-		return nullptr;
-	}
-
-	std::ifstream f(path, std::ios::in | std::ios::binary | std::ios::failbit);
-	SkipBOM(f);
-
-	const uintmax_t sz = std::filesystem::file_size(path);
-	char* code = new char[sz+1];
-	f.read(code, sz);
-	code[sz] = 0;
-
-	printf(code); printf("\n");
-
-	f.close();
-	return code;
-}
-
-char* Helper::ReadCombineKernels()
-{
-	if (!std::filesystem::exists("kernels/kernel_main.cl") || !std::filesystem::exists("kernels/MathAndSTL.cl") ) {
-		AXERROR("one or more kernel file is not exist!\n %c");
-		return nullptr;
-	}
-
-	std::ifstream f ("kernels/kernel_main.cl", std::ios::in | std::ios::binary | std::ios::failbit);
-	std::ifstream fm("kernels/MathAndSTL.cl" , std::ios::in | std::ios::binary | std::ios::failbit);
-	
-	SkipBOM(f); SkipBOM(fm);
-	const uintmax_t msz = std::filesystem::file_size("kernels/MathAndSTL.cl");
-	const uintmax_t sz  = std::filesystem::file_size("kernels/kernel_main.cl");
-
-	char* code = (char*)ResourceManager::GetAreaPointer();
-	fm.read(code, msz);
-	f.read(code + msz, sz);
-
-	code[sz + msz] = '\0';
-
-	printf(code); printf("\n");
-
-	f.close(); fm.close();
-	return code;
 }

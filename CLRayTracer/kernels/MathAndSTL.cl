@@ -26,23 +26,13 @@ float3 reflect(float3 v, float3 n) {
 	return v - n * dot(n, v) * 2.0f;
 }
 
-constant float Pr = 0.299f;
-constant float Pg = 0.587f;
-constant float Pb = 0.114f;
-
-float3 ACESFilm(float3 x)
-{
-	constant float a = 2.51f;
-	constant float b = 0.03f;
-	constant float c = 2.43f;
-	constant float d = 0.59f;
-	constant float e = 0.14f;
-	return (x * (a * x + b)) / (x * (c * x + d) + e);
+float3 ACESFilm(float3 x) {
+	return (x * (2.51f * x + 0.03f)) / (x * (2.43f * x + 0.59f) + 0.14f);
 }
 
 float3 Saturation(float3 in, float change)
 {
-	float3 P = (float3)(sqrt(in.x * in.x * Pr + in.y * in.y * Pg + in.z * in.z * Pb));
+	float3 P = (float3)(sqrt(in.x * in.x * 0.299f + in.y * in.y * 0.587f + in.z * in.z * 0.114f));
 	return P + (in - P) * change; 
 }
 
@@ -163,7 +153,7 @@ int SampleRotatedSphereTexture(float3 position, float3 center, float rotationx, 
 
 #define SAMPLE_SPHERE_TEXTURE(pos, center, texture) texturePixels[SampleSphereTexture(pos, center, texture)]
 
-int SampleTexture(Texture texture, half2 uv)
+int SampleTexture(Texture texture, float2 uv)
 {
 	uv -= floor(uv);
 	int uScaled = (int)(texture.width  * uv.x); // (0, 1) to (0, TextureWidth )

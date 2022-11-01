@@ -46,7 +46,7 @@ struct Matrix3
 			biggestIndex = 3;
 		}
 
-		float biggestVal = sqrt(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
+		float biggestVal = sqrtf(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
 		float mult = 0.25f / biggestVal;
 		
 		switch(biggestIndex)
@@ -126,9 +126,9 @@ struct Matrix4
 	FINLINE static Matrix4 CreateScale(const float ScaleX, const float ScaleY, const float ScaleZ)
 	{
 		Matrix4 M;
-		M.r[0] = _mm_set_ps(0, 0, 0, ScaleX);
-		M.r[1] = _mm_set_ps(0, 0, ScaleY, 0);
-		M.r[2] = _mm_set_ps(0, ScaleZ, 0, 0);
+		M.r[0] = _mm_set_ps(0.0f, 0.0f, 0.0f, ScaleX);
+		M.r[1] = _mm_set_ps(0.0f, 0.0f, ScaleY, 0.0f);
+		M.r[2] = _mm_set_ps(0.0f, ScaleZ, 0.0f, 0.0f);
 		M.r[3] = g_XMIdentityR3;
 		return M;
 	}
@@ -530,11 +530,11 @@ struct Matrix4
 
 		// code below adapted from Blender
 		Quaternion q;
-		const float trace = 0.25 * (row0.x + row1.y + row2.z + 1.0);
+		const float trace = 0.25f * (row0.x + row1.y + row2.z + 1.0f);
 
-		if (trace > 0) {
+		if (trace > 0.0f) {
 			const float sq = sqrtf(trace);
-			const float oneDivSq = 1.0 / (4.0 * sq);
+			const float oneDivSq = 1.0f / (4.0f * sq);
 
 			q = Quaternion((row1.z - row2.y) * oneDivSq,
 				(row2.x - row0.z) * oneDivSq,
@@ -543,31 +543,31 @@ struct Matrix4
 		}
 		else if (row0.x > row1.y && row0.x > row2.z)
 		{
-			float sq = 2.0 * sqrtf(1.0 + row0.x - row1.y - row2.z);
-			const float oneDivSq = 1.0 / sq;
+			float sq = 2.0f * sqrtf(1.0f + row0.x - row1.y - row2.z);
+			const float oneDivSq = 1.0f / sq;
 
-			q = Quaternion(0.25 * sq,
+			q = Quaternion(0.25f * sq,
 				(row1.x + row0.y) * oneDivSq,
 				(row2.x + row0.z) * oneDivSq,
 				(row2.y - row1.z) * oneDivSq);
 		}
 		else if (row1.y > row2.z)
 		{
-			float sq = 2.0 * sqrtf(1.0f + row1.y - row0.x - row2.z);
-			const float oneDivSq = 1.0 / sq;
+			float sq = 2.0f * sqrtf(1.0f + row1.y - row0.x - row2.z);
+			const float oneDivSq = 1.0f / sq;
 
 			q = Quaternion((row1.x + row0.y) * oneDivSq,
-				0.25 * sq,
+				0.25f * sq,
 				(row2.y + row1.z) * oneDivSq,
 				(row2.x - row0.z) * oneDivSq);
 		}
 		else {
-			float sq = 2.0 * sqrtf(1.0f + row2.z - row0.x - row1.y);
-			const float oneDivSq = 1.0 / sq;
+			float sq = 2.0f * sqrtf(1.0f + row2.z - row0.x - row1.y);
+			const float oneDivSq = 1.0f / sq;
 
 			q = Quaternion((row2.x + row0.z) * oneDivSq,
 				(row2.y + row1.z) * oneDivSq,
-				0.25 * sq,
+				0.25f * sq,
 				(row1.x - row0.y) * oneDivSq);
 		}
 		q = Vector4::Normalize(q.vec);

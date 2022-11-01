@@ -15,7 +15,7 @@ AX_ALIGNED(16) struct Quaternion
 	Quaternion() : x(0), y(0), z(0), w(1) {}
 	Quaternion(float scale) : x(scale), y(scale), z(scale), w(scale) {}
 	Quaternion(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
-	VECTORCALL Quaternion(__m128 _vec) : vec(_vec) {}
+	Quaternion(__m128 _vec) : vec(_vec) {}
 
 	operator __m128() const { return vec; }
 
@@ -146,20 +146,20 @@ AX_ALIGNED(16) struct Quaternion
 		const float singularityTest = (q.x * q.z) + (q.w * q.y);
 
 		if (singularityTest > SINGULARITY_THRESHOLD * unit) {
-			eulerAngles.z = 2.0f * atan2(q.x, q.w);
-			eulerAngles.y = PI / 2;
-			eulerAngles.x = 0;
+			eulerAngles.z = 2.0f * atan2f(q.x, q.w);
+			eulerAngles.y = PI / 2.0f;
+			eulerAngles.x = 0.0f;
 		}
 		else if (singularityTest < -SINGULARITY_THRESHOLD * unit)
 		{
-			eulerAngles.z = -2.0f * atan2(q.x, q.w);
-			eulerAngles.y = -(PI / 2);
-			eulerAngles.x = 0;
+			eulerAngles.z = -2.0f * atan2f(q.x, q.w);
+			eulerAngles.y = -(PI / 2.0f);
+			eulerAngles.x = 0.0f;
 		}
 		else {
-			eulerAngles.z = atan2(2 * ((q.w * q.z) - (q.x * q.y)), sqw + sqx - sqy - sqz);
-			eulerAngles.y = asin(2 * singularityTest / unit);
-			eulerAngles.x = atan2(2 * ((q.w * q.x) - (q.y * q.z)), sqw - sqx - sqy + sqz);
+			eulerAngles.z = atan2f(2.0f * ((q.w * q.z) - (q.x * q.y)), sqw + sqx - sqy - sqz);
+			eulerAngles.y = asinf(2.0f * singularityTest / unit);
+			eulerAngles.x = atan2f(2.0f * ((q.w * q.x) - (q.y * q.z)), sqw - sqx - sqy + sqz);
 		}
 		return eulerAngles;
 	}

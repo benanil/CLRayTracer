@@ -186,8 +186,8 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 		// todo store name etc. in somewhere else for showing it on gui	
 		materials[numMaterials].color = material.diffuseColor;
 		materials[numMaterials].specularColor = material.specularColor;
-		materials[numMaterials].shininess = ConvertFloatToHalf(material.shininess);
-		materials[numMaterials].roughness = ConvertFloatToHalf(material.roughness);
+		materials[numMaterials].shininess = material.shininess;
+		materials[numMaterials].roughness = material.roughness;
 		
 		char* albedoTexture = material.diffusePath;
 		materials[numMaterials].albedoTextureIndex = albedoTexture ? ImportTexture(albedoTexture) : 0;

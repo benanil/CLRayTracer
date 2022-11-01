@@ -258,6 +258,7 @@ MeshInstanceHandle Renderer::RegisterMeshInstance(
 	instance.materialStart = materialHandle;
 	instance.position = position;
 	numRegisteredInstances++;
+	return numMeshInstances-1;
 }
 
 void Renderer::EndInstanceRegister() {
@@ -295,7 +296,7 @@ void Renderer::ClearAllInstances() { numMeshInstances = 0; }
 void Renderer::Render()
 {
 	camera.Update();
-	float time = Window::GetTime();
+	float time = (double)Window::GetTime();
 
 	if (Window::IsFocused() && camera.wasPressing) 
 	{

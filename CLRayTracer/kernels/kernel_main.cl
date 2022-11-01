@@ -35,16 +35,18 @@ typedef struct _Material {
 	uint specularColor;
 	ushort albedoTextureIndex;
 	ushort specularTextureIndex;  
-	half shininess, roughness;
+	ushort shininess, roughness;
 } Material;
 
 typedef struct _Triangle {
 	float3 x, y, z; // triangle positions
-	half2 uv0, uv1, uv2;
+	short uv0[2];
+	short uv1[2];
+	short uv2[2];
 	ushort materialIndex;
-	half normal0[3];
-	half normal1[3];
-	half normal2[3];
+	short normal0[3];
+	short normal1[3];
+	short normal2[3];
 } Triangle;
 
 typedef struct _Triout {
@@ -217,12 +219,12 @@ kernel void Trace(
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
 	float3 atmosphericLight = (float3)(0.30f, 0.25f, 0.35f) * 0.2f;
 
-	for (int j = 0; j < 2; ++j)// num bounces
+	for (int j = 0; j < 3; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
 		HitRecord record = CreateHitRecord();
-		float roughness = 0.5f; // plane roughness
-		float shininess = 3.0f;
+		float roughness = 0.75f; // plane roughness
+		float shininess = 20.0f;
 		float3 specularColor = (float3)(0.8f, 0.7f, 0.6f);
 		// find intersectedsphere
 		for (int i = 0; i < trace_args.numSpheres; ++i)  {
@@ -243,6 +245,7 @@ kernel void Trace(
 
 			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
 			record.color.xyz = color * UNPACK_RGB8(pixel);
+			roughness = currentSphere.roughness;
 		}
 
 		Ray meshRay;
@@ -261,26 +264,26 @@ kernel void Trace(
 			{
 				Triangle triangle = triangles[triout.triIndex];
 				Material material = materials[instance.materialStart + triangle.materialIndex];
-				half3 baryCentrics = (half3)(1.0f - triout.u - triout.v, triout.u, triout.v);
+				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
 
 				record.point = meshRay.origin + triout.t * meshRay.direction;
-				record.normal = convert_float3( // fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x));
-					              vload3(0, triangle.normal0) * baryCentrics.x
-				                + vload3(0, triangle.normal1) * baryCentrics.y
-								+ vload3(0, triangle.normal2) * baryCentrics.z);
+				record.normal = convert_float3(vload3(0, triangle.normal0)) / 32766.0f * baryCentrics.x // fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x));
+					          + convert_float3(vload3(0, triangle.normal1)) / 32766.0f * baryCentrics.y
+					          + convert_float3(vload3(0, triangle.normal2)) / 32766.0f * baryCentrics.z;
 
-				half2 uv =  triangle.uv0 * baryCentrics.x 
-					      + triangle.uv1 * baryCentrics.y
-					      + triangle.uv2 * baryCentrics.z;
+				float2 uv = convert_float2(vload2(0, triangle.uv0)) / 32766.0f * baryCentrics.x 
+					      + convert_float2(vload2(0, triangle.uv1)) / 32766.0f * baryCentrics.y
+					      + convert_float2(vload2(0, triangle.uv2)) / 32766.0f * baryCentrics.z;
 				
 				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
+				RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], uv)];
 				// uint pixel = WangHash(triangle.materialIndex * (triangle.materialIndex << 8) + (triangle.materialIndex << 16));
 
 				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
-				specularColor = UnpackRGB8u(material.specularColor);
+				specularColor = UNPACK_RGB8(specularPixel) * UnpackRGB8u(material.specularColor) * 1.1f;
 				besthit.distance = triout.t;	
-				roughness = convert_float(material.roughness);
-				shininess = convert_float(material.shininess);
+				roughness = material.roughness / 65000.0f;
+				shininess = material.shininess / 65000.0f * 100.0f;
 			}
 		}	
 		
@@ -298,13 +301,12 @@ kernel void Trace(
 		// check Shadow
 		// Ray shadowRay = CreateRay(ray.origin, -lightDir);
 		float shadow = 1.0f; 
-	
 		// todo shadow for only directional light
 	
 		// Shade
 		float ndl = fmax(dot(record.normal, -lightDir), 0.0f);
-		float3 specular = (float3)((1.0f - roughness) * ndl * shadow); 
-		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess); // meshray direction = wi
+		float3 specular = (float3)((1.0f - roughness) * ndl * shadow) * specularColor; 
+		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess)*0.5f; // meshray direction = wi
 		float3 ambient = (1.0f - ndl) * atmosphericLight;
 
 		result += energy * (record.color * ndl) + ambient + specularLighting;

@@ -4,8 +4,8 @@
 struct ObjMaterial {
 	char* name;
 	unsigned diffuseColor, specularColor;
-	ushort shininess, roughness;
-	char* diffusePath, *specularPath;
+	float shininess, roughness;
+	char* diffusePath, * specularPath;
 };
 
 struct ObjMesh
@@ -17,14 +17,11 @@ struct ObjMesh
 	int numMaterials;
 	int materialRanges[128][2];
 	// we will use this for storing .obj and .mtl text and texture paths
-	char* textMem; 
+	char* textMem;
 };
 
-namespace Helper
+namespace AssetManager
 {
-	ObjMesh* ImportObj(const char* path, Tri* triArena);
+	ObjMesh* ImportMesh(const char* path, Tri* triArena);
 	void DestroyObj(ObjMesh* mesh);
-
-	char* ReadAllText(const char* path);
-	char* ReadCombineKernels();
 }

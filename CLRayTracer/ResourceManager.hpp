@@ -28,7 +28,7 @@ struct Material {
 	uint specularColor;
 	ushort albedoTextureIndex;
 	ushort specularTextureIndex;  
-	half shininess, roughness;
+	ushort shininess, roughness;
 };
 
 #pragma pack(1)
@@ -47,13 +47,13 @@ AX_ALIGNED(16) struct Tri {
 	union { struct {float3 vertex1; float centeroidy;};  __m128 v1; };
 	union { struct {float3 vertex2; float centeroidz;};  __m128 v2; };
 
-	half uv0x, uv0y;
-	half uv1x, uv1y;
-	half uv2x, uv2y;
-	ushort materialIndex;
-	half normal0x, normal0y, normal0z;
-	half normal1x, normal1y, normal1z;
-	half normal2x, normal2y, normal2z;
+	short uv0x, uv0y;
+	short uv1x, uv1y;
+	short uv2x, uv2y;
+	short materialIndex;
+	short normal0x, normal0y, normal0z;
+	short normal1x, normal1y, normal1z;
+	short normal2x, normal2y, normal2z;
 };
 
 static_assert(sizeof(Tri) == (64 + sizeof(__m128)));
@@ -65,7 +65,7 @@ typedef ushort MaterialHandle;
 // this is same for each resource type:
 //     the idea is:
 //         create big chunk of data pool on GPU
-//         create resources
+//         create resources on cpu
 //         push to gpu
 //         flush cpu memory and fill it again
 
