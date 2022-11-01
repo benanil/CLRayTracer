@@ -71,7 +71,7 @@ void CreateGLTexture(GLuint& texture, int width, int height, void* data = nullpt
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 }
 
 void PushSphere(float radius, float angle, float distance, unsigned color, char texture)
@@ -190,7 +190,7 @@ int Renderer::Initialize()
 	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	MeshHandle bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
+	MeshHandle bmwMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
 	// MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
 
 	ResourceManager::PushMeshesToGPU(command_queue);
@@ -293,12 +293,12 @@ void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 positio
 
 void Renderer::ClearAllInstances() { numMeshInstances = 0; }
 
-void Renderer::Render()
+unsigned Renderer::Render()
 {
 	camera.Update();
-	float time = (double)Window::GetTime();
+	float time = (float)Window::GetTime();
 
-	if (Window::IsFocused() && camera.wasPressing) 
+	if (Window::IsFocused()) // && camera.wasPressing 
 	{
 		if (shouldUpdateInstances)
 		{
@@ -312,10 +312,9 @@ void Renderer::Render()
 
 		if (hasRemovedInstances) { /*todo*/ }
 
-		// glClear(GL_COLOR_BUFFER_BIT);
+		 glClear(GL_COLOR_BUFFER_BIT);
 
-		Vector2i windowSize = Window::GetWindowScale();
-		size_t globalWorkSize[2] = { windowSize.x, windowSize.y };
+		size_t globalWorkSize[2] = { (size_t)camera.projWidth, (size_t)camera.projHeight};
 
 		struct TraceArgs {
 			Vector3f cameraPosition;
@@ -331,8 +330,8 @@ void Renderer::Render()
 		cl_int clerr; cl_event event;
 
 		// prepare ray generation kernel
-		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &windowSize.x);                 assert(clerr == 0);
-		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &windowSize.y);                 assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &camera.projWidth);                 assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &camera.projHeight);                 assert(clerr == 0);
 		clerr = clSetKernelArg(rayGenKernel, 2, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
 		clerr = clSetKernelArg(rayGenKernel, 3, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
 		clerr = clSetKernelArg(rayGenKernel, 4, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
@@ -364,8 +363,9 @@ void Renderer::Render()
 	}
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 	double ms = (Window::GetTime() - time) * 1000.0;
-	Window::ChangeName(ms);
+	//Window::ChangeName(ms);
 	if (time > 5.0f && ms > 80) { AXERROR("GPU Botleneck! %f ms", ms); exit(0); }
+	return screenTexture;
 }
 
 void Renderer::Terminate()

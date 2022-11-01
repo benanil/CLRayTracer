@@ -217,7 +217,7 @@ kernel void Trace(
 	float3 lightDir = (float3)(0.0f, sin(331.01), cos(331.01)); // sun dir
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
-	float3 atmosphericLight = (float3)(0.30f, 0.25f, 0.35f) * 0.2f;
+	float3 atmosphericLight = (float3)(0.255f, 0.25f, 0.27f) * 0.2f;
 
 	for (int j = 0; j < 3; ++j)// num bounces
 	{
@@ -277,10 +277,9 @@ kernel void Trace(
 				
 				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
 				RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], uv)];
-				// uint pixel = WangHash(triangle.materialIndex * (triangle.materialIndex << 8) + (triangle.materialIndex << 16));
 
 				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
-				specularColor = UNPACK_RGB8(specularPixel) * UnpackRGB8u(material.specularColor) * 1.1f;
+				specularColor = UNPACK_RGB8(specularPixel) * UnpackRGB8u(material.specularColor);
 				besthit.distance = triout.t;	
 				roughness = material.roughness / 65000.0f;
 				shininess = material.shininess / 65000.0f * 100.0f;
@@ -306,7 +305,7 @@ kernel void Trace(
 		// Shade
 		float ndl = fmax(dot(record.normal, -lightDir), 0.0f);
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow) * specularColor; 
-		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess)*0.5f; // meshray direction = wi
+		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess) * 0.5f; // meshray direction = wi
 		float3 ambient = (1.0f - ndl) * atmosphericLight;
 
 		result += energy * (record.color * ndl) + ambient + specularLighting;

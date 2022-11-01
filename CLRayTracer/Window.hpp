@@ -6,7 +6,7 @@ namespace Window
 	int Create();
 	void Destroy();
 	bool ShouldClose();
-	void EndFrame();
+	void EndFrame(unsigned screenImageGL);
 	unsigned GetWidth();
 	unsigned GetHeight();
 	void ChangeName(float ms);

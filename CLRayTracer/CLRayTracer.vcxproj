@@ -72,11 +72,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LibraryPath>$(SolutionDir)/libs/;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir)/fast_obj/;$(SolutionDir)/include/;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)/imgui/;$(SolutionDir)/include/;$(IncludePath)</IncludePath>
+    <SourcePath>$(SolutionDir)/imgui/;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LibraryPath>$(SolutionDir)/libs/;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir)/fast_obj/;$(SolutionDir)/include/;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)/imgui/;$(SolutionDir)/include/;$(IncludePath)</IncludePath>
+    <SourcePath>$(SolutionDir)/imgui/;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -148,8 +150,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\imgui\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="..\imgui\backends\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="..\imgui\imgui.cpp" />
+    <ClCompile Include="..\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\imgui\imgui_widgets.cpp" />
     <ClCompile Include="BVH.cpp" />
-    <ClCompile Include="CLRayTracer.cpp" />
+    <ClCompile Include="EngineMain.cpp" />
+    <ClCompile Include="Editor.cpp" />
     <ClCompile Include="glad.cpp" />
     <ClCompile Include="Helper.cpp" />
     <ClCompile Include="Logger.cpp" />
@@ -159,6 +169,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Array.hpp" />
+    <ClInclude Include="Editor.hpp" />
+    <ClInclude Include="Engine.hpp" />
     <ClInclude Include="Math\Camera.hpp" />
     <ClInclude Include="cl.hpp" />
     <ClInclude Include="CLHelper.hpp" />

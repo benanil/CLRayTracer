@@ -31,6 +31,7 @@ struct Camera
 	Vector3f Front, Right, Up;
 	
 	float pitch = 0.0f, yaw = 0.0f, senstivity = 20.0f;
+	int projWidth, projHeight;
 
 	bool wasPressing = false;
 
@@ -97,6 +98,7 @@ struct Camera
 
 	void RecalculateProjection(int width, int height)
 	{
+		projWidth = width; projHeight = height;
 		projection = Matrix4::PerspectiveFovRH(verticalFOV * DegToRad, width, height, nearClip, farClip);
 		inverseProjection = Matrix4::Inverse(projection);	
 	}

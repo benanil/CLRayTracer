@@ -3,6 +3,8 @@
 #include <filesystem>
 #include "Logger.hpp"
 #include "ResourceManager.hpp"
+#include <cassert>
+#include "Math/Random.hpp"
 
 static void SkipBOM(std::ifstream& in)
 {
@@ -109,9 +111,9 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 			currMaterial->shininess = 3.0f, currMaterial->roughness = 0.65f;
 			currMaterial->diffusePath = nullptr, currMaterial->specularPath = nullptr;
 			currMaterial->name = curr;
-			unsigned hash = 5381;
+			unsigned hash = Random::WangHash(uint(curr[0]) | uint(curr[1] << 8) | uint(curr[2] << 16));
 			while(*curr != '\n' && !IsWhitespace(*curr))
-				hash = *curr++ + (hash << 6) + (hash << 16) - hash ^ 0b1010101010101010101010101010101u; // dellendik fittirdik anca boyle collision'dan kurtuldum
+				hash = *curr++ + (hash << 6) + (hash << 16) - hash; 
 			*curr++ = '\0'; // null terminator
 			if (materialMap[hash & 511])
 				AXERROR("mesh importing failed material hash collision detected!"), exit(0);
@@ -220,9 +222,9 @@ ObjMesh* Helper::ImportObj(const char* path, Tri* triArena)
 		if (curr[0] == 'u' && curr[1] == 's' && curr[2] == 'e') // && curr[3] == 'm' && curr[4] == 't' no need
 		{
 			curr += 7; // skip usemtl + space
-			unsigned hash = 5381;
+			unsigned hash = Random::WangHash(uint(curr[0]) | uint(curr[1] << 8) | uint(curr[2] << 16));
 			while(*curr != '\n' && !IsWhitespace(*curr)) // create texture path hash 
-				hash = *curr++ + (hash << 6) + (hash << 16) - hash ^ 0b1010101010101010101010101010101u;
+				hash = *curr++ + (hash << 6) + (hash << 16) - hash;
 			while (*curr == '\n' || IsWhitespace(*curr)) curr++;
 			currentMaterial = materialMap[hash & 511]; // use material index for this group of triangles
 		}

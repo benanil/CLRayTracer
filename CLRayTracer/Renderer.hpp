@@ -18,7 +18,7 @@ namespace Renderer
 	// called from main.cpp
 	int Initialize();
 	void Terminate();
-	void Render();
+	unsigned Render();
 	
 	// called from window.cpp
 	void OnKeyPressed(int keyCode, int action);

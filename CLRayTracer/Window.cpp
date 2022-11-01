@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <Windows.h>
 #include "Renderer.hpp"
+#include "Editor.hpp"
 
 // Window dimensions
 namespace Window
@@ -15,7 +16,8 @@ namespace Window
 
 	double dt;
 	
-	void EndFrame() {
+	void EndFrame(unsigned screenImagegl) {
+		Editor::Render(screenImagegl);
 		glfwSwapInterval(1); 
 		glfwSwapBuffers(window); 
 	}
@@ -39,6 +41,7 @@ namespace Window
 		double currTime = glfwGetTime();
 		dt = currTime - LastTime;
 		LastTime = currTime;
+		Editor::Begin();
 		return s;
 	}
 
@@ -90,7 +93,8 @@ namespace Window
 	void WindowCallback(GLFWwindow* window, int width, int height)
 	{
 		Width = width; Height = height;
-		Renderer::OnWindowResize(width, height);
+		// todo only use this on gameplay not on editor
+		// Renderer::OnWindowResize(width, height);
 	}
 
 	void FocusCallback(GLFWwindow* window, int focused)
@@ -107,9 +111,9 @@ int Window::Create()
 	glfwInit();
 	// Set all the required options for GLFW
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
+	//glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 	// Create a GLFWwindow object that we can use for GLFW's functions
 	window = glfwCreateWindow(Width, Height, "CLRayTracer", nullptr, nullptr);
 	if (!window) return 0;
@@ -131,7 +135,7 @@ int Window::Create()
 	const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	monitorScale.x = vidMode->width;
 	monitorScale.y = vidMode->height;
-
+	Editor::Create(window);
 	// Define the viewport dimensions
 	glViewport(0, 0, Width, Height);
 	return 1;

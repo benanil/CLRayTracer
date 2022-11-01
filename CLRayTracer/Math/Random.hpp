@@ -19,6 +19,14 @@ namespace Random
 		return result;
 	}
 
+	FINLINE uint WangHash(uint s) { 
+		s = (s ^ 61u) ^ (s >> 16u);
+		s *= 9, s = s ^ (s >> 4u);
+		s *= 0x27d4eb2du;
+		s = s ^ (s >> 15u); 
+		return s; 
+	}
+
 	class IRandom
 	{
 	public:
