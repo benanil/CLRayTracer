@@ -157,18 +157,21 @@
     <ClCompile Include="..\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="AssetManager.cpp" />
     <ClCompile Include="BVH.cpp" />
     <ClCompile Include="EngineMain.cpp" />
     <ClCompile Include="Editor.cpp" />
     <ClCompile Include="glad.cpp" />
     <ClCompile Include="Helper.cpp" />
     <ClCompile Include="Logger.cpp" />
+    <ClCompile Include="quicklz.c" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="ResourceManager.cpp" />
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Array.hpp" />
+    <ClInclude Include="AssetManager.hpp" />
     <ClInclude Include="Editor.hpp" />
     <ClInclude Include="Engine.hpp" />
     <ClInclude Include="Math\Camera.hpp" />
@@ -184,6 +187,7 @@
     <ClInclude Include="Math\Transform.hpp" />
     <ClInclude Include="Math\Vector.hpp" />
     <ClInclude Include="Math\Vector4.hpp" />
+    <ClInclude Include="quicklz.h" />
     <ClInclude Include="Renderer.hpp" />
     <ClInclude Include="ResourceManager.hpp" />
     <ClInclude Include="Timer.hpp" />

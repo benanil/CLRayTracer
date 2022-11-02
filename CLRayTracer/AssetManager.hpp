@@ -2,26 +2,24 @@
 #include "ResourceManager.hpp"
 
 struct ObjMaterial {
-	char* name;
+	int name;
 	unsigned diffuseColor, specularColor;
-	float shininess, roughness;
-	char* diffusePath, * specularPath;
+	ushort shininess, roughness;
+	int diffusePath, specularPath;
 };
 
 struct ObjMesh
 {
+	char* name;
+
 	Tri* tris;
 	int numTris;
-
+	
 	ObjMaterial materials[32]; // sponza has 25 material
 	int numMaterials;
-	int materialRanges[128][2];
-	// we will use this for storing .obj and .mtl text and texture paths
-	char* textMem;
+	// we will use this for storing .mtl text and texture paths
+	char* mtlText; 
 };
 
-namespace AssetManager
-{
-	ObjMesh* ImportMesh(const char* path, Tri* triArena);
-	void DestroyObj(ObjMesh* mesh);
-}
+ObjMesh* AssetManager_ImportMesh(const char* path, Tri* triArena);
+void AssetManager_DestroyMesh(ObjMesh* mesh);

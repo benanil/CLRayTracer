@@ -18,6 +18,7 @@ struct MeshInfo {
 	uint numTriangles; 
 	uint triangleStart; 
 	ushort materialStart; 
+	ushort numMaterials;
 };
 
 // this material will store default mesh/submesh

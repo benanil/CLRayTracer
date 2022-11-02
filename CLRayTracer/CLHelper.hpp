@@ -1,30 +1,20 @@
 #pragma once
 #include "ResourceManager.hpp"
 
-struct ObjMaterial {
-	char* name;
-	unsigned diffuseColor, specularColor;
-	ushort shininess, roughness;
-	char* diffusePath, *specularPath;
-};
-
-struct ObjMesh
-{
-	Tri* tris;
-	int numTris;
-
-	ObjMaterial materials[32]; // sponza has 25 material
-	int numMaterials;
-	int materialRanges[128][2];
-	// we will use this for storing .obj and .mtl text and texture paths
-	char* textMem; 
-};
+#define SkipBOM(in)                           \
+{                                             \
+	char test[3] = { 0 };                     \
+	in.read(test, 3);                         \
+	if (!((unsigned char)test[0] == 0xEF &&   \
+		(unsigned char)test[1] == 0xBB &&     \
+		(unsigned char)test[2] == 0xBF)) {    \
+		in.seekg(0);                          \
+	}                                         \
+}
 
 namespace Helper
 {
-	ObjMesh* ImportObj(const char* path, Tri* triArena);
-	void DestroyObj(ObjMesh* mesh);
-
 	char* ReadAllText(const char* path);
+	void WriteAllText(const char* path, const char* text);
 	char* ReadCombineKernels();
 }

@@ -10,7 +10,7 @@
 #include "Timer.hpp"
 #include <emmintrin.h>
 #include <filesystem>
-#include "CLHelper.hpp"
+#include "AssetManager.hpp"
 
 // we are pre allocating gpu memory at the beginning and we are pushing data from cpu 
 // whenever we want, after that we can deform that data 
@@ -50,6 +50,7 @@ namespace ResourceManager
 	// [sword materials one per each submesh], [another sword materials for same mesh], [box materials], [armor materials], [armor materials 2]
 	// we will index these material arrays for each mesh instance
 	Material materials[MaxMaterials];
+	ObjMesh* meshObjs[MaxMeshes];
 
 	unsigned char* textureArena; // for each scene we will use same memory
 	unsigned char* meshArena;    // for each scene we will use same memory
@@ -124,6 +125,8 @@ void ResourceManager::PrepareTextures()
 
 TextureHandle ResourceManager::ImportTexture(const char* path)
 {
+	if (*path == ' ') path++;
+
 	if (!std::filesystem::exists(path))
 		AXERROR("texture importing failed! file is not exist: %s", path), exit(0);
 
@@ -175,11 +178,13 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 {
 	MeshInfo& meshInfo = meshInfos[numMeshes];
 	ObjMesh* mesh = nullptr;
-	mesh = Helper::ImportObj(path, (Tri*)meshArena + meshArenaOffset);
+	mesh = AssetManager_ImportMesh(path, (Tri*)meshArena + meshArenaOffset);
 	meshInfo.materialStart = mesh->numMaterials  ? numMaterials : 0;
 	meshInfo.triangleStart = meshArenaOffset / sizeof(Tri);
 	meshInfo.numTriangles = mesh->numTris;
-	
+	meshInfo.numMaterials = mesh->numMaterials;
+	meshObjs[numMeshes] = mesh;
+
 	for (int i = 0; i < mesh->numMaterials; ++i)
 	{
 		ObjMaterial& material = mesh->materials[i];
@@ -189,13 +194,12 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 		materials[numMaterials].shininess = material.shininess;
 		materials[numMaterials].roughness = material.roughness;
 		
-		char* albedoTexture = material.diffusePath;
+		char* albedoTexture = material.diffusePath ? mesh->mtlText + material.diffusePath : nullptr;
 		materials[numMaterials].albedoTextureIndex = albedoTexture ? ImportTexture(albedoTexture) : 0;
 	
-		char* specularTexture = material.specularPath;
+		char* specularTexture = material.specularPath ? mesh->mtlText + material.specularPath : nullptr;
 		materials[numMaterials++].specularTextureIndex = specularTexture ? ImportTexture(specularTexture) : 0;
 	}
-	Helper::DestroyObj(mesh);
 
 	meshArenaOffset += meshInfo.numTriangles * sizeof(Tri);
 
@@ -246,5 +250,6 @@ void ResourceManager::Destroy()
 void ResourceManager::Finalize()
 {
 	Destroy();
+	while (numMeshes--) AssetManager_DestroyMesh(meshObjs[numMeshes]);
 	_aligned_free(meshArena); free(textureArena);
 }
