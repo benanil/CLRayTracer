@@ -111,8 +111,8 @@ namespace ResourceManager
 			ImGui::LabelText("Name:", materialInfos[i].name);
 			edited |= ImGui::ColorEdit3("color", &vecColor.x);
 			material.color = ImGui::ColorConvertFloat4ToU32(vecColor);
-			edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }); ImGui::SameLine();
-			edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
+			if (material.albedoTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }), ImGui::SameLine();
+			if (material.specularTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
 			edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
 			edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
 			ImGui::PopID();

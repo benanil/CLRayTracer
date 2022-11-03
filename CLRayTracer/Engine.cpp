@@ -37,9 +37,11 @@ void Engine_UpdateProfilerStats(ProfilerStats stats, float ms)
 #ifndef IMGUI_DISABLE
 static void DisplayProfilerStats()
 {
+	ImGui::Begin("Debug");
 	for (int i = 0; i < Num_ProfilerStats; ++i) {
 		ImGui::LabelText(ProfilerNames[i], "%f ms", ProfilerSpeeds[i]);
 	}
+	ImGui::End();
 }
 #endif
 
