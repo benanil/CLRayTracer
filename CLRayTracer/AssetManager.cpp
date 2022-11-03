@@ -3,10 +3,9 @@
 #include "AssetManager.hpp"
 #include "CLHelper.hpp"
 #include "Logger.hpp"
-#include "Math/Random.hpp"
+#include "Random.hpp"
 #include "quicklz.h"
-
-constexpr uint CMeshVersion = 0;
+#include <cassert>
 
 FINLINE bool IsNumber(const char c) { return c <= '9' && c >= '0'; }
 FINLINE bool IsWhitespace(char c)   { return (c == ' ' || c == '\t' || c == '\r'); }
@@ -35,23 +34,63 @@ inline char* ParseFloat(float* f, char* __restrict ptr)
 	return ptr;
 }
 
-inline int PointerDistance(const char* less, const char* higher)
+inline int PointerDistance(const char* __restrict less, const char* __restrict higher)
 {
 	int result = 0;
 	while (less++ < higher) result++;
 	return result;
 }
 
-inline void ChangeExtension(char* path, const char* newExt, int len)
+static char* tempAlloc0, * tempAlloc1, * tempAlloc2;
+
+static size_t sizeTemp0 = 1024 * sizeof(float3);
+static size_t sizeTemp1 = 1024 * sizeof(float2);
+static size_t sizeTemp2 = 1024 * sizeof(float3);
+
+static size_t currTemp0 = 0, currTemp1 = 0, currTemp2 = 0;
+
+// usefull for stbi image
+
+inline void AssetManagerTempReserve(char** ptr, size_t* size, size_t newSize)
 {
-	path[len - 1] = newExt[2]; path[len - 2] = newExt[1]; path[len - 3] = newExt[0];
+	if (newSize > *size)
+	{
+		*size = Max(*size + (newSize / 2ul), newSize);
+		*ptr = (char*)realloc(*ptr, *size);
+	}
+}
+
+void* AssetManagerTempAllocate(size_t size)
+{
+	AssetManagerTempReserve(&tempAlloc0, &sizeTemp0, currTemp0 + size);
+	size_t oldPoint = currTemp0;
+	currTemp0 += size;
+	return tempAlloc0 + oldPoint;
+}
+
+void AssetManagerTempFree(void* ptr) { }
+
+void* AssetManagerTempRealloc(void* ptr, size_t size) { assert(0); return 0; };
+
+void AssetManagerResetTempMemory() { currTemp0 = 0; }
+
+void AssetManager_Initialize()
+{
+	tempAlloc0 = (char*)malloc(2048 * sizeof(float3));
+	tempAlloc1 = (char*)malloc(1024 * sizeof(float2));
+	tempAlloc2 = (char*)malloc(1024 * sizeof(float3));
+}
+
+void AssetManager_Destroy()
+{
+	free(tempAlloc0), free(tempAlloc1), free(tempAlloc2);
 }
 
 void AssetManager_SaveMeshToDisk(char* path, ObjMesh* mesh, uint msz);
 
 static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pathDup, size_t pathLen)
 {
-	ChangeExtension(pathDup, "mtl", pathLen);
+	Helper::ChangeExtension(pathDup, "mtl", pathLen);
 	char* mtlPath = pathDup; // for readibility
 
 	if (!std::filesystem::exists(path)) {
@@ -75,16 +114,11 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 	if (msz) mesh->mtlText = Helper::ReadAllText(mtlPath);
 
 	// todo string pool
-	// todo use arena allocator or some part of the .obj text data
-	float* positions  = (float*)malloc(1024 * sizeof(float3));
-	float* texCoords = (float*)malloc(1024 * sizeof(float2));
-	float* normals   = (float*)malloc(1024 * sizeof(float3)); // todo
-
 	int numVertices = 0, numTexCoords = 0, numNormals = 0;
 
-	int sizeVertices = 1024, sizeTexCoords = 1024, sizeNormals = 1024; // size of the arrays 
-	float* currVertices = positions, *currTexCoords = texCoords, *currNormals = normals;
-	
+	float* currVertices = (float*)tempAlloc0, *currTexCoords = (float*)tempAlloc1, *currNormals = (float*)tempAlloc2;
+	float* positions = currVertices, *texCoords = currTexCoords, *normals = currNormals;
+
 	// hashMap for material indices, materialMap[materialNameHash & 255] = material Index 
 	unsigned char materialMap[512] = {0};
 	
@@ -119,12 +153,12 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 			float f;
 			curr = ParseFloat(&f, curr + 2);
 			f = Clamp(f, 0.0f, 100.0f) / 100.0f;
-			currMaterial->shininess = (ushort)(f * 65000.0f);
+			currMaterial->shininess = (ushort)(f * 65000.0f); // float range to short range
 		}
 		else if (curr[0] == 'd') { // roughness
 			float f;
 			curr = ParseFloat(&f, curr + 2);
-			currMaterial->roughness = (ushort)(Clamp(f, 0.0f, 1.0f) * 65000.0f);
+			currMaterial->roughness = (ushort)(Clamp(f, 0.0f, 1.0f) * 65000.0f); // float range to short range
 		}
 		else if (curr[0] == 'K' && curr[1] == 'd') { // diffuse color
 			float colorf[3];
@@ -171,12 +205,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 		{
 			while (curr[1] == ' ') { // vertex=position 
 				curr += 2; 
-				if (numVertices + 1 >= sizeVertices) {
-					sizeVertices += sizeVertices / 2;
-					positions = (float*)realloc(positions, sizeVertices * sizeof(float3));
-					currVertices = positions + (numVertices * 3);
-				}
-			
+				AssetManagerTempReserve(&tempAlloc0, &sizeTemp0, numVertices * sizeof(float3) + sizeof(float3));
 				curr = ParseFloat(currVertices++, curr); 
 				curr = ParseFloat(currVertices++, curr); 
 				curr = ParseFloat(currVertices++, curr); numVertices++;
@@ -186,12 +215,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 
 			while (curr[1] == 't') {
 				curr += 2;
-				if (numTexCoords + 1 >= sizeTexCoords) {
-					sizeTexCoords += sizeTexCoords / 2;
-					texCoords = (float*)realloc(texCoords, sizeTexCoords * sizeof(float2));
-					currTexCoords = texCoords + (numTexCoords * 2);
-				}
-			
+				AssetManagerTempReserve(&tempAlloc1, &sizeTemp1, numTexCoords * sizeof(float2) + sizeof(float2));
 				curr = ParseFloat(currTexCoords++, curr); 
 				curr = ParseFloat(currTexCoords++, curr); numTexCoords++;
 				// skip line&whiteSpace
@@ -200,12 +224,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 
 			while (curr[1] == 'n') {
 				curr += 2; 
-				if (numNormals + 1 >= sizeNormals) {
-					sizeNormals += sizeNormals / 2;
-					normals = (float*)realloc(normals, sizeNormals * sizeof(float3));
-					currNormals = normals + (numNormals * 3);
-				}
-			
+				AssetManagerTempReserve(&tempAlloc2, &sizeTemp2, numNormals * sizeof(float3) + sizeof(float3));
 				curr = ParseFloat(currNormals++, curr); 
 				curr = ParseFloat(currNormals++, curr); 
 				curr = ParseFloat(currNormals++, curr); numNormals++;
@@ -262,12 +281,14 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 
 		if (*curr == 'o' || *curr == 'm' || *curr == 's')  while (*curr++ != '\n'); // skip line, header is unknown|unused
 	}
-	free(positions), free(texCoords), free(normals);
 	delete[] objText;
-	ChangeExtension(pathDup, "clm", (uint)pathLen);
+	Helper::ChangeExtension(pathDup, "clm", (uint)pathLen);
 	AssetManager_SaveMeshToDisk(pathDup, mesh, msz);
 	return mesh;
 }
+
+constexpr uint CMeshVersion = 0;
+constexpr uint CTextureVersion = 0;
 
 static void AssetManager_SaveMeshToDisk(char* path, ObjMesh* mesh, uint msz)
 {
@@ -286,15 +307,14 @@ static void AssetManager_SaveMeshToDisk(char* path, ObjMesh* mesh, uint msz)
 	}
 	else {
 		qlz_state_compress* state_compress = new qlz_state_compress();
-		// todo use arena allocator
-		char* buff = (char*)malloc(mesh->numTris * sizeof(Tri) + 64);
+
+		AssetManagerTempReserve(&tempAlloc0, &sizeTemp0, mesh->numTris * sizeof(Tri) + 64);
+		char* buff = tempAlloc0;
 		size_t triCompSize = qlz_compress(mesh->tris, buff, sizeof(Tri) * mesh->numTris, state_compress);
 		
 		stream.write((char*)&triCompSize, sizeof(size_t));
 		stream.write((char*)buff, triCompSize); // write compressed data to file	
 		delete state_compress; // vertex compressing end
-
-		free(buff);
 	}
 	stream.close();
 }
@@ -317,9 +337,8 @@ static ObjMesh* AssetManager_LoadMeshFromDisk(const char* path, Tri* triArena)
 	triFile.read((char*)&msz, sizeof(uint));
 	result->mtlText = new char[msz];
 	triFile.read(result->mtlText, msz);
-
-	if (meshVersion != CMeshVersion)  
-		AXERROR("mesh version is not same!"), exit(0); 
+	
+	if (meshVersion != CMeshVersion)   AXERROR("mesh version is not same!"), exit(0);
 
 	if (result->numTris < 1000)
 		triFile.read((char*)triArena, result->numTris * sizeof(Tri));
@@ -328,13 +347,13 @@ static ObjMesh* AssetManager_LoadMeshFromDisk(const char* path, Tri* triArena)
 		qlz_state_decompress* state_decompress = new qlz_state_decompress();
 		size_t triCompSize = 0; // get compressed size of vertices
 		triFile.read((char*)&triCompSize, sizeof(size_t));
-		// allocate buffer for reading compressed data from file
-		char* buff = (char*)malloc(triCompSize);
+		
+		AssetManagerTempReserve(&tempAlloc0, &sizeTemp0, triCompSize);
+		char* buff = (char*)tempAlloc0;
 		triFile.read(buff, triCompSize); // read compressed vertex data
 		// decompress vertex data to vertices
 		qlz_decompress(buff, triArena, state_decompress);
 		delete state_decompress; // reading vertex data end
-		free(buff);
 	}
 	triFile.close();
 	return result;
@@ -345,7 +364,7 @@ ObjMesh* AssetManager_ImportMesh(const char* path, Tri* triArena)
 	char* dupPath = _strdup(path);
 	size_t pathLen = strlen(path);
 
-	ChangeExtension(dupPath, "clm", pathLen); // change to .clm format and search if it exist below
+	Helper::ChangeExtension(dupPath, "clm", pathLen); // change to .clm format and search if it exist below
 	ObjMesh* result = nullptr;
 
 	// load .clm mesh(our custom)

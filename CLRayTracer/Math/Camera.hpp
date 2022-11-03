@@ -30,7 +30,7 @@ struct Camera
 	
 	Vector3f Front, Right, Up;
 	
-	float pitch = 0.0f, yaw = 0.0f, senstivity = 20.0f;
+	float pitch = 0.0f, yaw = -90.0f , senstivity = 20.0f;
 	int projWidth, projHeight;
 
 	bool wasPressing = false;
@@ -38,7 +38,7 @@ struct Camera
 	Camera() {}
 
 	Camera(Vector2i xviewPortSize)
-	: viewportSize(xviewPortSize), position(0.0f,3.0f, 20.0f), targetPosition(0.0f,0.0f,-5.0f), Front(0.0f,0.0f,-1.0f)
+	: viewportSize(xviewPortSize), position(0.0f,4.0f, 15.0f), targetPosition(0.0f, 4.0f, 15.0f), Front(0.0f,0.0f,-1.0f)
 	{
 		monitorSize = Window::GetMonitorScale();
 		RecalculateProjection(xviewPortSize.x, xviewPortSize.y);

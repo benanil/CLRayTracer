@@ -9,11 +9,12 @@ struct MeshInstance {
 };
 
 typedef uint MeshInstanceHandle;
+typedef uint SphereHandle;
 
 namespace Renderer
 {
-	constexpr uint NumSpheres = 1;
 	constexpr uint MaxNumInstances = 401;
+	constexpr uint MaxNumSpheres = 256;
 
 	// called from main.cpp
 	int Initialize();
@@ -24,15 +25,36 @@ namespace Renderer
 	void OnKeyPressed(int keyCode, int action);
 	void OnWindowResize(int width, int height);
 
+	
 	// called from everywhere
 	// spawns a mesh to the world
 	// spawning static objects first and dynamic objects afterwords will upgrade the speed of the rendering
-	// recomended to seperate the registering to two stages/areas left is static right is dynamic
+	// recomended to seperate the registering to two stages/areas left is static right is dynamic	
 	void BeginInstanceRegister();
 	MeshInstanceHandle RegisterMeshInstance(MeshHandle handle, MaterialHandle material, float3 position);
 	void EndInstanceRegister();
 	void RemoveMeshInstance(MeshInstanceHandle  handle);
 	void ClearAllInstances();
+
+	inline Sphere CreateSphere(float radius, float3 position, float shininess = 25.0f, float roughness = 0.7f, unsigned color = ~0u, TextureHandle texture = 0u)
+	{
+		Sphere sphere;
+		sphere.radius = radius;
+		sphere.position[0] = position.x; 
+		sphere.position[1] = position.y;
+		sphere.position[2] = position.z;
+		sphere.color = color & 0x00ffffff | (texture << 24);
+		sphere.roughness = roughness;
+		sphere.shininess = shininess;
+		return sphere;
+	}
+
+	// rgb8 only
+	void CreateGLTexture(uint& texture, int width, int height, void* data = nullptr);
+
+	SphereHandle PushSphere(const Sphere& sphere);
+	void RemoveSphere(SphereHandle sphere);
+	void UpdateSpheres();
 
 	void SetMeshInstanceMaterial(MeshInstanceHandle meshHandle, MaterialHandle materialHandle);
 	

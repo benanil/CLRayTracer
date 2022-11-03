@@ -1,5 +1,4 @@
 #pragma once
-#include "ResourceManager.hpp"
 
 #define SkipBOM(in)                           \
 {                                             \
@@ -14,6 +13,22 @@
 
 namespace Helper
 {
+	inline void ChangeExtension(char* path, const char* newExt, int len)
+	{
+		path[len - 1] = newExt[2]; path[len - 2] = newExt[1]; path[len - 3] = newExt[0];
+	}
+
+	inline char* GetPathName(char* path)
+	{
+		int lastSeperator = 0, i = 0;
+		char* ptr = path;
+		while (*path) {
+			if (*path == '//' || *path == '/') lastSeperator = i + 1;
+			path++, i++;
+		}
+		return ptr + lastSeperator;
+	}
+		
 	char* ReadAllText(const char* path);
 	void WriteAllText(const char* path, const char* text);
 	char* ReadCombineKernels();

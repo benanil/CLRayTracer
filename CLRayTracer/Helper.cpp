@@ -2,6 +2,7 @@
 #include <fstream>
 #include <filesystem>
 #include "Logger.hpp"
+#include "AssetManager.hpp"
 
 char* Helper::ReadAllText(const char* path)
 {
@@ -37,12 +38,11 @@ char* Helper::ReadCombineKernels()
 
 	std::ifstream f ("kernels/kernel_main.cl", std::ios::in | std::ios::binary | std::ios::failbit);
 	std::ifstream fm("kernels/MathAndSTL.cl" , std::ios::in | std::ios::binary | std::ios::failbit);
-	
 	SkipBOM(f); SkipBOM(fm);
 	const uintmax_t msz = std::filesystem::file_size("kernels/MathAndSTL.cl");
 	const uintmax_t sz  = std::filesystem::file_size("kernels/kernel_main.cl");
 
-	char* code = (char*)ResourceManager::GetAreaPointer();
+	char* code = (char*)AssetManagerTempAllocate(msz + sz + 1);
 	fm.read(code, msz);
 	f.read(code + msz, sz);
 
@@ -51,5 +51,6 @@ char* Helper::ReadCombineKernels()
 	printf(code); printf("\n");
 
 	f.close(); fm.close();
+	AssetManagerResetTempMemory();
 	return code;
 }

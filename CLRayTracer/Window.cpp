@@ -1,16 +1,18 @@
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include "Window.hpp"
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <Windows.h>
 #include "Renderer.hpp"
-#include "Editor.hpp"
+#include "Editor/Editor.hpp"
 
 // Window dimensions
 namespace Window
 {
 	GLFWwindow* window;
 
-	int Width = 900, Height = 700;
+	int Width = 1249, Height = 720;
 	bool Focused = true;
 	Vector2i monitorScale;
 

@@ -10,7 +10,8 @@
 #include "Window.hpp"
 #include "Logger.hpp"
 #include "Math/Camera.hpp"
-#include "Math/Random.hpp"
+#include "Random.hpp"
+#include "Engine.hpp"
 
 // todo: 
 //      dynamicly add meshes, spheres, textures, materials, skybox
@@ -48,8 +49,10 @@ void main()\
 	cl_program program;
 
 	cl_mem clglScreen, rayMem, sphereMem, instanceMem;
+	cl_int clerr;
 		
-	Sphere spheres[Renderer::NumSpheres];
+	uint NumSpheres = 0;
+	Sphere spheres[Renderer::MaxNumSpheres];
 	MeshInstance meshInstances[Renderer::MaxNumInstances];
 
 	uint numMeshInstances = 0u;
@@ -63,7 +66,7 @@ void main()\
 typedef void (*GLFWglproc)(void);
 extern "C" GLFWglproc glfwGetProcAddress(const char* procname); 
 
-void CreateGLTexture(GLuint& texture, int width, int height, void* data = nullptr)
+void Renderer::CreateGLTexture(GLuint& texture, int width, int height, void* data)
 {
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
@@ -71,20 +74,18 @@ void CreateGLTexture(GLuint& texture, int width, int height, void* data = nullpt
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 }
 
-void PushSphere(float radius, float angle, float distance, unsigned color, char texture)
+SphereHandle Renderer::PushSphere(const Sphere& sphere)
 {
-	static int planetIndex = 0;
-	Sphere& sphere = spheres[planetIndex];
-	sphere.radius = radius;
-	sphere.position[0] = sinf(angle) * distance; 
-	sphere.position[1] = 1.2f;
-	sphere.position[2] = cosf(angle) * distance;
-	sphere.color = color & 0x00ffffff | (texture << 24);
-	sphere.roughness = .95f;
-	planetIndex++;
+	spheres[NumSpheres] = sphere;
+	return NumSpheres++;
+}
+
+void Renderer::RemoveSphere(SphereHandle sphere)
+{
+	spheres[sphere] = spheres[NumSpheres--];
 }
 
 int Renderer::Initialize()
@@ -130,7 +131,6 @@ int Renderer::Initialize()
 		glBindVertexArray(VAO);
 	}
 	
-	cl_int clerr;
 	
 	// initialize openCL
 	
@@ -162,7 +162,7 @@ int Renderer::Initialize()
 	// create command queue using the context and device
 	command_queue = clCreateCommandQueueWithProperties(context, device_id, nullptr, &clerr);
 
-	ResourceManager::Initialize(context);
+	ResourceManager::Initialize(context, command_queue);
 	
 	// no need to delete this kernel code memory allocated from arena allocator
 	char* kernelCode = Helper::ReadCombineKernels(); 
@@ -183,33 +183,7 @@ int Renderer::Initialize()
 		return 0;
 	}
 
-	ResourceManager::PrepareTextures();
-	ResourceManager::PrepareMeshes();
-
-	// skybox texture no need to store handle
-	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
-	
-	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
-	MeshHandle bmwMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
-	// MeshHandle sponzaMesh  = ResourceManager::ImportMesh("Assets/sponza/sponza.obj");
-
-	ResourceManager::PushMeshesToGPU(command_queue);
-
-	ResourceManager::PushTexturesToGPU(command_queue);
-
 	instanceMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(MeshInstance) * MaxNumInstances, nullptr, &clerr); assert(clerr == 0);
-	// todo create instances
-	BeginInstanceRegister();
-
-	// RegisterMeshInstance(dragonMesh, ResourceManager::NoneMaterial, float3(0.0f, 0.0f, 1.0f));
-
-	Random::PCG pcg{};
-
-	RegisterMeshInstance(bmwMesh, ResourceManager::DefaultMaterial, float3(0.0f, 0.2f, 0.0f));
-
-	EndInstanceRegister();
-	// create random sphere positions&colors
-	PushSphere(1.00f, PI, 5.0f, 0xffffffffu, jupiterTexture);
 	
 	rayMem = clCreateBuffer(context, 0, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
 
@@ -217,9 +191,14 @@ int Renderer::Initialize()
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
 
 	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
-	sphereMem  = clCreateBuffer(context, 32, sizeof(Sphere) * NumSpheres, spheres, &clerr); assert(clerr == 0);
+	sphereMem  = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(Sphere) * MaxNumSpheres, nullptr, &clerr); assert(clerr == 0);
 
 	return 1;
+}
+
+void Renderer::UpdateSpheres()
+{
+	clerr = clEnqueueWriteBuffer(command_queue, sphereMem, false, 0, NumSpheres * sizeof(Sphere), spheres, 0, 0, 0); assert(clerr == 0);
 }
 
 void Renderer::OnKeyPressed(int keyCode, int action) {}
@@ -262,7 +241,7 @@ MeshInstanceHandle Renderer::RegisterMeshInstance(
 }
 
 void Renderer::EndInstanceRegister() {
-	clEnqueueWriteBuffer(command_queue, instanceMem, true, lastRegisterInstanceIndex * sizeof(MeshInstance), numRegisteredInstances * sizeof(MeshInstance), meshInstances + lastRegisterInstanceIndex, 0, 0, 0);	
+	clerr = clEnqueueWriteBuffer(command_queue, instanceMem, true, lastRegisterInstanceIndex * sizeof(MeshInstance), numRegisteredInstances * sizeof(MeshInstance), meshInstances + lastRegisterInstanceIndex, 0, 0, 0);	
 	lastRegisterInstanceIndex += numRegisteredInstances;
 	numRegisteredInstances = 0;
 }
@@ -319,7 +298,8 @@ unsigned Renderer::Render()
 		struct TraceArgs {
 			Vector3f cameraPosition;
 			float time;
-			uint numSpheres, numMeshes, padd;
+			uint numSpheres, numMeshes;
+			float sunAngle;
 		} trace_args;
 
 		trace_args.cameraPosition = camera.position;
@@ -361,10 +341,11 @@ unsigned Renderer::Render()
 
 		clFinish(command_queue);
 	}
-	glDrawArrays(GL_TRIANGLES, 0, 3);
+	// glDrawArrays(GL_TRIANGLES, 0, 3);
 	double ms = (Window::GetTime() - time) * 1000.0;
-	//Window::ChangeName(ms);
 	if (time > 5.0f && ms > 80) { AXERROR("GPU Botleneck! %f ms", ms); exit(0); }
+	Engine_UpdateProfilerStats(ProfilerStats_Render, (float)ms);
+
 	return screenTexture;
 }
 

@@ -159,9 +159,12 @@
     <ClCompile Include="..\imgui\imgui_widgets.cpp" />
     <ClCompile Include="AssetManager.cpp" />
     <ClCompile Include="BVH.cpp" />
+    <ClCompile Include="Editor\ResourceWindow.cpp" />
+    <ClCompile Include="Engine.cpp" />
     <ClCompile Include="EngineMain.cpp" />
-    <ClCompile Include="Editor.cpp" />
+    <ClCompile Include="Editor\Editor.cpp" />
     <ClCompile Include="glad.cpp" />
+    <ClCompile Include="Editor\GUI.cpp" />
     <ClCompile Include="Helper.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="quicklz.c" />
@@ -172,7 +175,8 @@
   <ItemGroup>
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="AssetManager.hpp" />
-    <ClInclude Include="Editor.hpp" />
+    <ClInclude Include="Editor\Editor.hpp" />
+    <ClInclude Include="Editor\FontAwesome.hpp" />
     <ClInclude Include="Engine.hpp" />
     <ClInclude Include="Math\Camera.hpp" />
     <ClInclude Include="cl.hpp" />
@@ -182,7 +186,7 @@
     <ClInclude Include="Math\Math.hpp" />
     <ClInclude Include="Math\Matrix.hpp" />
     <ClInclude Include="Math\Quaternion.hpp" />
-    <ClInclude Include="Math\Random.hpp" />
+    <ClInclude Include="Random.hpp" />
     <ClInclude Include="Math\SIMDCommon.hpp" />
     <ClInclude Include="Math\Transform.hpp" />
     <ClInclude Include="Math\Vector.hpp" />

@@ -4,10 +4,6 @@
 #include "Common.hpp"
 #include <immintrin.h>
 
-struct Texture {
-	int width, height, offset, padd;
-};
-
 AX_ALIGNED(16) struct BVHNode
 {
 	union { struct { float3 aabbMin; uint leftFirst; }; __m128 minv; };
@@ -19,6 +15,21 @@ struct MeshInfo {
 	uint triangleStart; 
 	ushort materialStart; 
 	ushort numMaterials;
+	const char* path;
+};
+
+struct Texture {
+	int width, height, offset, padd;
+};
+
+struct TextureInfo {
+	char* path;
+	char* name;
+	uint glTextureIcon;
+};
+
+struct MaterialInfo {
+	char* name;
 };
 
 // this material will store default mesh/submesh
@@ -39,7 +50,8 @@ typedef struct Sphere_t
 	float radius;
 	float roughness;
 	unsigned color;
-	float rotationx, rotationy;
+	short rotationx, rotationy; //
+	float shininess;
 } Sphere;
 
 #pragma pack(1)
@@ -96,17 +108,18 @@ namespace ResourceManager
 	Material* CreateMaterial(MaterialHandle* handle, int count = 1);
 
 	void PrepareMeshes();
-	void PushMeshesToGPU(cl_command_queue queue);
-	void PushMaterialsToGPU(cl_command_queue queue);
+	void PushMeshesToGPU();
+	void PushMaterialsToGPU();
 	ushort GetNumMeshes();
 
 	MeshInfo GetMeshInfo(MeshHandle handle);
+	TextureInfo GetTextureInfo(TextureInfo handle);
 
-	void Initialize(cl_context context);
+	void Initialize(cl_context context, cl_command_queue commandQueue);
 	void Destroy();
 	void Finalize();
 
-	void PushTexturesToGPU(cl_command_queue context);
+	void PushTexturesToGPU();
 	void* GetAreaPointer(); // unsafe
 }
 

@@ -215,14 +215,12 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 	SubdivideBVH(bvhNode, tris, rightChildIdx);
 }
 
-#include "Timer.hpp"
-
 BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices, uint* _nodesUsed)
 {
 	// 1239.74ms SIMD
 	// 556.51ms  SIMD with custom swap
 	// 6511.79ms withut
-	CSTIMER("BVH build Time ms: ");
+	
 	int numTriangles = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		numTriangles += meshes[i].numTriangles;

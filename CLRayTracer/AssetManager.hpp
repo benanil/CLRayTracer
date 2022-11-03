@@ -23,3 +23,16 @@ struct ObjMesh
 
 ObjMesh* AssetManager_ImportMesh(const char* path, Tri* triArena);
 void AssetManager_DestroyMesh(ObjMesh* mesh);
+
+void AssetManager_Initialize();
+void AssetManager_Destroy();
+
+void* AssetManagerTempAllocate(size_t size);
+
+inline void AssetManagerTempReserve(char* ptr, size_t* size, size_t newSize);
+
+void AssetManagerTempFree(void* ptr);
+
+void* AssetManagerTempRealloc(void* ptr);
+
+void AssetManagerResetTempMemory();
