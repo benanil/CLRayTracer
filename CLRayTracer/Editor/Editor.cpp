@@ -71,6 +71,7 @@ static void ChangeScale()
 static void DrawRendererWindow(unsigned texture)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, { 300, 400 });
     static const int flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
     ImGui::Begin("Render Window", nullptr, flags);
     
@@ -97,7 +98,7 @@ static void DrawRendererWindow(unsigned texture)
     first = false;
 
     ImGui::End();
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
 }
 
 void Editor::Begin()
@@ -174,9 +175,6 @@ void Editor::Render(unsigned screenRenderImageGl)
     DrawRendererWindow(screenRenderImageGl);
 	for (int i = 0; i < numOnEditor; ++i) OnEditor[i]();
 	//ResourcesWindow::DrawWindow();
-
-    ImGui::Begin("test", 0, 0);
-    ImGui::End();
     
     ImGui::Render();
 

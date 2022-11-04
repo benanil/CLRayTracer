@@ -19,7 +19,7 @@ namespace Renderer
 	// called from main.cpp
 	int Initialize();
 	void Terminate();
-	unsigned Render();
+	unsigned Render(float sunAngle);
 	
 	// called from window.cpp
 	void OnKeyPressed(int keyCode, int action);

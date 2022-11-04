@@ -1,5 +1,6 @@
 // software as is bla bla license bla bla gev gev gev
 // Anilcan Gulkaya 10/03/2022
+// this commented header below automaticly included 
 // #include "MathAndSTL.cl"
 
 // todo seperate 
@@ -9,7 +10,8 @@
 typedef struct _TraceArgs{
 	float cameraPos[3];
 	float time;
-	uint numSpheres, numMeshes, padd;
+	uint numSpheres, numMeshes;
+	float sunAngle;
 } TraceArgs;
 
 typedef struct _RayHit {
@@ -214,12 +216,13 @@ kernel void Trace(
 
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
 	
-	float3 lightDir = (float3)(0.0f, sin(331.01), cos(331.01)); // sun dir
+	float3 lightDir = (float3)(0.0f, sin(trace_args.sunAngle), cos(trace_args.sunAngle)); // sun dir
+	lightDir *= max(dot(lightDir, (float3)(0.0f, -1.0f, 0.0f)), 0.2f);
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
-	float3 atmosphericLight = (float3)(0.255f, 0.25f, 0.27f) * 0.2f;
-
-	for (int j = 0; j < 3; ++j)// num bounces
+	float3 atmosphericLight = (float3)(0.255f, 0.25f, 0.27f) * 1.0f;
+	
+	for (int j = 0; j < 2; ++j)// num bounces
 	{
 		RayHit besthit = CreateRayHit();
 		HitRecord record = CreateHitRecord();
@@ -227,26 +230,26 @@ kernel void Trace(
 		float shininess = 20.0f;
 		float3 specularColor = (float3)(0.8f, 0.7f, 0.6f);
 		// find intersectedsphere
-		for (int i = 0; i < trace_args.numSpheres; ++i)  {
-			IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
-		}
+		// for (int i = 0; i < trace_args.numSpheres; ++i)  {
+		// 	IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
+		// }
 		
 		if (IntersectPlane(ray, &besthit)) {
 			record.point = ray.origin + ray.direction * besthit.distance;
 			record.color = (float3)(70.0f / 255.0f, 70.0f/ 255.0f, 70.0f/ 255.0f);
 		}
-		else {
-			Sphere currentSphere = spheres[besthit.index];
-			float3 center = vload3(0, currentSphere.position);
-			record.point = ray.origin + ray.direction * besthit.distance;
-			record.normal.xyz = normalize(record.point - center);
-			float3 color = UnpackRGB8u(currentSphere.color);
-			uchar textureIndex = currentSphere.color >> 24;
-
-			RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
-			record.color.xyz = color * UNPACK_RGB8(pixel);
-			roughness = currentSphere.roughness;
-		}
+		// else {
+		// 	Sphere currentSphere = spheres[besthit.index];
+		// 	float3 center = vload3(0, currentSphere.position);
+		// 	record.point = ray.origin + ray.direction * besthit.distance;
+		// 	record.normal.xyz = normalize(record.point - center);
+		// 	float3 color = UnpackRGB8u(currentSphere.color);
+		// 	uchar textureIndex = currentSphere.color >> 24;
+		// 
+		// 	RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
+		// 	record.color.xyz = color * UNPACK_RGB8(pixel);
+		// 	roughness = currentSphere.roughness;
+		// }
 
 		Ray meshRay;
 		meshRay.direction = ray.direction;
@@ -303,10 +306,11 @@ kernel void Trace(
 		// todo shadow for only directional light
 	
 		// Shade
-		float ndl = fmax(dot(record.normal, -lightDir), 0.0f);
+		float ndl = dot(record.normal, -lightDir);
+		float3 ambient = max(0.0f - ndl, 0.1f) * atmosphericLight * record.color;
+		ndl = max(ndl, 0.0f);
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow) * specularColor; 
 		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess) * 0.5f; // meshray direction = wi
-		float3 ambient = (1.0f - ndl) * atmosphericLight;
 
 		result += energy * (record.color * ndl) + ambient + specularLighting;
 		energy *= specular;
@@ -314,8 +318,8 @@ kernel void Trace(
 		
 		lightDir = ray.direction;
 	}
-	result = Saturation(result, 1.2f);
-	result = ACESFilm(result);
+	// result = Saturation(result, 1.2f);
+	// result = ACESFilm(result);
 
 	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 1.0f));
 }

@@ -270,7 +270,7 @@ void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 positio
 
 void Renderer::ClearAllInstances() { numMeshInstances = 0; }
 
-unsigned Renderer::Render()
+unsigned Renderer::Render(float sunAngle)
 {
 	camera.Update();
 	float time = (float)Window::GetTime();
@@ -289,8 +289,6 @@ unsigned Renderer::Render()
 
 		if (hasRemovedInstances) { /*todo*/ }
 
-		 glClear(GL_COLOR_BUFFER_BIT);
-
 		size_t globalWorkSize[2] = { (size_t)camera.projWidth, (size_t)camera.projHeight};
 
 		struct TraceArgs {
@@ -303,6 +301,7 @@ unsigned Renderer::Render()
 		trace_args.cameraPosition = camera.position;
 		trace_args.numSpheres = NumSpheres;
 		trace_args.numMeshes = numMeshInstances;
+		trace_args.sunAngle = sunAngle;
 		trace_args.time = time;
 
 		cl_int clerr; cl_event event;

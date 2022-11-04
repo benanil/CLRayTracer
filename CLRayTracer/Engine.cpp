@@ -3,16 +3,18 @@
 #include "Renderer.hpp"
 
 // things that I want to edit in editor
-// edit materials
+// edit materials DONE
 // edit sun angle
 // edit mesh instance positions
-//
+// spawn new mesh
+// recompile kernel
 
 static void(*EndFrameEvents[20])(void);
 static int NumEndFrameEvents = 0;
 
 static void(*ApplicationExitEvents[20])(void);
 static int NumApplicationExitEvents = 0;
+static float SunAngle = -1.96f;
 
 void Engine_AddEndOfFrameEvent(void(*action)())
 {
@@ -37,7 +39,9 @@ void Engine_UpdateProfilerStats(ProfilerStats stats, float ms)
 #ifndef IMGUI_DISABLE
 static void DisplayProfilerStats()
 {
-	ImGui::Begin("Debug");
+	ImGui::Begin("Lighting");
+	ImGui::DragFloat("SunAngle", &SunAngle, 0.025f, -3.14f, 0.0f);
+	ImGui::Separator();
 	for (int i = 0; i < Num_ProfilerStats; ++i) {
 		ImGui::LabelText(ProfilerNames[i], "%f ms", ProfilerSpeeds[i]);
 	}
@@ -64,9 +68,14 @@ void Engine_Start()
 
 	Renderer::EndInstanceRegister();
 	// create random sphere positions&colors
-	Sphere sphere = Renderer::CreateSphere(2.0f, float3(5.0f, 0.0f, 0.0f));
-	Renderer::PushSphere(sphere);
-	Renderer::UpdateSpheres();
+	// Sphere sphere = Renderer::CreateSphere(2.0f, float3(5.0f, 0.0f, 0.0f));
+	// Renderer::PushSphere(sphere);
+	// Renderer::UpdateSpheres();
+}
+
+float Engine_Tick()
+{
+	return SunAngle;
 }
 
 void Engine_EndFrame()

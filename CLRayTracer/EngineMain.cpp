@@ -10,7 +10,8 @@ int main()
 
     while (!Window::ShouldClose())
     {
-        unsigned screenImagegl = Renderer::Render();
+        float sunAngle = Engine_Tick();
+        unsigned screenImagegl = Renderer::Render(sunAngle);
         Window::EndFrame(screenImagegl);
         Engine_EndFrame();
     }

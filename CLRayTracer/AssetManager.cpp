@@ -53,8 +53,7 @@ static size_t currTemp0 = 0, currTemp1 = 0, currTemp2 = 0;
 
 inline void AssetManagerTempReserve(char** ptr, size_t* size, size_t newSize)
 {
-	if (newSize > *size)
-	{
+	if (newSize > *size) {
 		*size = Max(*size + (newSize / 2ul), newSize);
 		*ptr = (char*)realloc(*ptr, *size);
 	}
@@ -76,7 +75,7 @@ void AssetManagerResetTempMemory() { currTemp0 = 0; }
 
 void AssetManager_Initialize()
 {
-	tempAlloc0 = (char*)malloc(2048 * sizeof(float3));
+	tempAlloc0 = (char*)malloc(30000 * sizeof(float3));
 	tempAlloc1 = (char*)malloc(1024 * sizeof(float2));
 	tempAlloc2 = (char*)malloc(1024 * sizeof(float3));
 }
@@ -117,7 +116,6 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 	int numVertices = 0, numTexCoords = 0, numNormals = 0;
 
 	float* currVertices = (float*)tempAlloc0, *currTexCoords = (float*)tempAlloc1, *currNormals = (float*)tempAlloc2;
-	float* positions = currVertices, *texCoords = currTexCoords, *normals = currNormals;
 
 	// hashMap for material indices, materialMap[materialNameHash & 255] = material Index 
 	unsigned char materialMap[512] = {0};
@@ -206,6 +204,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 			while (curr[1] == ' ') { // vertex=position 
 				curr += 2; 
 				AssetManagerTempReserve(&tempAlloc0, &sizeTemp0, numVertices * sizeof(float3) + sizeof(float3));
+				currVertices = (float*)(tempAlloc0 + (numVertices * sizeof(float3)));
 				curr = ParseFloat(currVertices++, curr); 
 				curr = ParseFloat(currVertices++, curr); 
 				curr = ParseFloat(currVertices++, curr); numVertices++;
@@ -216,6 +215,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 			while (curr[1] == 't') {
 				curr += 2;
 				AssetManagerTempReserve(&tempAlloc1, &sizeTemp1, numTexCoords * sizeof(float2) + sizeof(float2));
+				currTexCoords = (float*)(tempAlloc1 + (numTexCoords * sizeof(float2)));
 				curr = ParseFloat(currTexCoords++, curr); 
 				curr = ParseFloat(currTexCoords++, curr); numTexCoords++;
 				// skip line&whiteSpace
@@ -225,7 +225,8 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 			while (curr[1] == 'n') {
 				curr += 2; 
 				AssetManagerTempReserve(&tempAlloc2, &sizeTemp2, numNormals * sizeof(float3) + sizeof(float3));
-				curr = ParseFloat(currNormals++, curr); 
+				currNormals = (float*)(tempAlloc2 + (numNormals * sizeof(float3)));
+				curr = ParseFloat(currNormals++, curr);
 				curr = ParseFloat(currNormals++, curr); 
 				curr = ParseFloat(currNormals++, curr); numNormals++;
 				// skip line&whiteSpace
@@ -265,12 +266,12 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 				while (IsNumber(*curr)) normalIdx = 10 * normalIdx + (*curr++ - '0'); curr++;
 			
 				positionIdx--, textureIdx--, normalIdx--;// obj index always starts from 1
-				std::memcpy(vertPtr, positions + (positionIdx * 3), sizeof(float3));
-				texCoordPtr[0] = short(texCoords[textureIdx * 2 + 0] * 32766.0f);
-				texCoordPtr[1] = short((1.0f - texCoords[textureIdx * 2 + 1]) * 32766.0f);
-				normalPtr[0] = short(normals[normalIdx * 3 + 0] * 32766.0f);
-				normalPtr[1] = short(normals[normalIdx * 3 + 1] * 32766.0f);
-				normalPtr[2] = short(normals[normalIdx * 3 + 2] * 32766.0f);
+				std::memcpy(vertPtr, tempAlloc0 + (positionIdx * 3), sizeof(float3));
+				texCoordPtr[0] = short(tempAlloc1[textureIdx * 2 + 0] * 32766.0f);
+				texCoordPtr[1] = short((1.0f - tempAlloc1[textureIdx * 2 + 1]) * 32766.0f);
+				normalPtr[0] = short(tempAlloc2[normalIdx * 3 + 0] * 32766.0f);
+				normalPtr[1] = short(tempAlloc2[normalIdx * 3 + 1] * 32766.0f);
+				normalPtr[2] = short(tempAlloc2[normalIdx * 3 + 2] * 32766.0f);
 			}
 
 			tri->materialIndex = currentMaterial;

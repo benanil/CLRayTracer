@@ -101,23 +101,28 @@ namespace ResourceManager
 	void DrawMaterialsWindow()
 	{
 		bool edited = false;
-		ImGui::Begin("Materials");
-		for (int i = 0; i < numMaterials; ++i)
+		ImGui::Begin("Resources");
+
+		if (ImGui::CollapsingHeader("materials"))
 		{
-			Material& material = materials[i];
-			ImVec4 vecColor = ImGui::ColorConvertU32ToFloat4(material.color);
-			ImGui::PushID(i);
-			if (materialInfos[i].name != nullptr)
-			ImGui::LabelText("Name:", materialInfos[i].name);
-			edited |= ImGui::ColorEdit3("color", &vecColor.x);
-			material.color = ImGui::ColorConvertFloat4ToU32(vecColor);
-			if (material.albedoTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }), ImGui::SameLine();
-			if (material.specularTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
-			edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
-			edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
-			ImGui::PopID();
+			for (int i = 0; i < numMaterials; ++i)
+			{
+				Material& material = materials[i];
+				ImVec4 vecColor = ImGui::ColorConvertU32ToFloat4(material.color);
+				ImGui::PushID(i);
+				if (materialInfos[i].name != nullptr)
+					ImGui::LabelText("Name:", materialInfos[i].name);
+				edited |= ImGui::ColorEdit3("color", &vecColor.x);
+				material.color = ImGui::ColorConvertFloat4ToU32(vecColor);
+				if (material.albedoTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }), ImGui::SameLine();
+				if (material.specularTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
+				edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
+				edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
+				ImGui::PopID();
+			}
+			if (edited) PushMaterialsToGPU();
 		}
-		if (edited) PushMaterialsToGPU();
+	
 		ImGui::End();
 	}
 #endif
