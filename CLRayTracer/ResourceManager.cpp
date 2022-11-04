@@ -196,20 +196,6 @@ TextureHandle ResourceManager::ImportTexture(const char* path)
 	else if (numTextures > 3) // Jump skybox texture
 	{
 		stbir_resize_uint8(ptr, texture.width, texture.height, 0, iconStaging, 64, 64, 0, 3);
-
-		// converts to 64 * 64 icon
-		// int scaledW = texture.width / 64;
-		// for (int j = 0; j < 64; ++j) 
-		// {
-		// 	for (int i = 0; i < 64; ++i) 
-		// 	{
-		// 		int destination = (j * 3 * 64) + (i * 3);
-		// 		unsigned char* source = (ptr + (j * 3 * texture.width) + (i * 3 * scaledW));
-		// 		ptr[destination + 0] = source[0];
-		// 		ptr[destination + 1] = source[1];
-		// 		ptr[destination + 2] = source[2];
-		// 	}
-		// }
 		Renderer::CreateGLTexture(textureInfo.glTextureIcon, 64, 64, iconStaging);
 	}
 #endif

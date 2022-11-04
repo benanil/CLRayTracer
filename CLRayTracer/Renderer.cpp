@@ -130,8 +130,6 @@ int Renderer::Initialize()
 		glGenVertexArrays(1, &VAO);
 		glBindVertexArray(VAO);
 	}
-	
-	
 	// initialize openCL
 	
 	cl_uint num_of_platforms = 0;
