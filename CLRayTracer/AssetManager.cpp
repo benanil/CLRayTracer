@@ -89,9 +89,6 @@ void AssetManager_SaveMeshToDisk(char* path, ObjMesh* mesh, uint msz);
 
 static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pathDup, size_t pathLen)
 {
-	Helper::ChangeExtension(pathDup, "mtl", pathLen);
-	char* mtlPath = pathDup; // for readibility
-
 	if (!std::filesystem::exists(path)) {
 		AXERROR("mesh file is not exist!\n %c", path);
 		return nullptr;
@@ -106,9 +103,11 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 	mesh->mtlText = nullptr;
 
 	const uintmax_t sz = std::filesystem::file_size(path);
+	char* objText = Helper::ReadAllText(path);
+	Helper::ChangeExtension(pathDup, "mtl", pathLen);
+	char* mtlPath = pathDup; // for readibility
 	uint msz = std::filesystem::exists(mtlPath) ? (uint)std::filesystem::file_size(mtlPath) : 0u;
 
-	char* objText = Helper::ReadAllText(path);
 	// read if material path exist 
 	if (msz) mesh->mtlText = Helper::ReadAllText(mtlPath);
 
@@ -256,6 +255,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 			float* vertPtr = (float*)tri; 
 			short* texCoordPtr = &tri->uv0x;
 			short* normalPtr = &tri->normal0x;
+			float* texcoords = (float*)tempAlloc1, *normals = (float*)tempAlloc2;
 
 			for(int i = 0; i < 3; ++i, texCoordPtr += 2, vertPtr += 4, normalPtr += 3) // compiler please unroll :D
 			{
@@ -266,12 +266,12 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 				while (IsNumber(*curr)) normalIdx = 10 * normalIdx + (*curr++ - '0'); curr++;
 			
 				positionIdx--, textureIdx--, normalIdx--;// obj index always starts from 1
-				std::memcpy(vertPtr, tempAlloc0 + (positionIdx * 3), sizeof(float3));
-				texCoordPtr[0] = short(tempAlloc1[textureIdx * 2 + 0] * 32766.0f);
-				texCoordPtr[1] = short((1.0f - tempAlloc1[textureIdx * 2 + 1]) * 32766.0f);
-				normalPtr[0] = short(tempAlloc2[normalIdx * 3 + 0] * 32766.0f);
-				normalPtr[1] = short(tempAlloc2[normalIdx * 3 + 1] * 32766.0f);
-				normalPtr[2] = short(tempAlloc2[normalIdx * 3 + 2] * 32766.0f);
+				std::memcpy(vertPtr, tempAlloc0 + (positionIdx * 3 * 4), sizeof(float3));
+				texCoordPtr[0] = short(texcoords[textureIdx * 2 + 0] * 32766.0f);
+				texCoordPtr[1] = short((1.0f - texcoords[textureIdx * 2 + 1]) * 32766.0f);
+				normalPtr[0] = short(normals[normalIdx * 3 + 0] * 32766.0f);
+				normalPtr[1] = short(normals[normalIdx * 3 + 1] * 32766.0f);
+				normalPtr[2] = short(normals[normalIdx * 3 + 2] * 32766.0f);
 			}
 
 			tri->materialIndex = currentMaterial;
