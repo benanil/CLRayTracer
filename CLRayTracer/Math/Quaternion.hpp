@@ -120,10 +120,10 @@ AX_ALIGNED(16) struct Quaternion
 		float cx = cosf(x), cy = cosf(y), cz = cosf(z);
 		float sx = sinf(x), sy = sinf(y), sz = sinf(z);
 		Quaternion q;
+		q.w = cx * cy * cz + sx * sy * sz;
 		q.x = sx * cy * cz - cx * sy * sz;
 		q.y = cx * sy * cz + sx * cy * sz;
 		q.z = cx * cy * sz - sx * sy * cz;
-		q.w = cx * cy * cz + sx * sy * sz;
 		return q;
 	}
 
@@ -134,33 +134,9 @@ AX_ALIGNED(16) struct Quaternion
 
 	inline Vector3f static ToEulerAngles(const Quaternion& q) noexcept {
 		Vector3f eulerAngles;
-
-		// Threshold for the singularities found at the north/south poles.
-		constexpr float SINGULARITY_THRESHOLD = 0.4999995f;
-
-		const float sqw = q.w * q.w;
-		const float sqx = q.x * q.x;
-		const float sqy = q.y * q.y;
-		const float sqz = q.z * q.z;
-		const float unit = sqx + sqy + sqz + sqw; // if normalised is one, otherwise is correction factor
-		const float singularityTest = (q.x * q.z) + (q.w * q.y);
-
-		if (singularityTest > SINGULARITY_THRESHOLD * unit) {
-			eulerAngles.z = 2.0f * atan2f(q.x, q.w);
-			eulerAngles.y = PI / 2.0f;
-			eulerAngles.x = 0.0f;
-		}
-		else if (singularityTest < -SINGULARITY_THRESHOLD * unit)
-		{
-			eulerAngles.z = -2.0f * atan2f(q.x, q.w);
-			eulerAngles.y = -(PI / 2.0f);
-			eulerAngles.x = 0.0f;
-		}
-		else {
-			eulerAngles.z = atan2f(2.0f * ((q.w * q.z) - (q.x * q.y)), sqw + sqx - sqy - sqz);
-			eulerAngles.y = asinf(2.0f * singularityTest / unit);
-			eulerAngles.x = atan2f(2.0f * ((q.w * q.x) - (q.y * q.z)), sqw - sqx - sqy + sqz);
-		}
+		eulerAngles.x = atan2f(2.0f * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
+		eulerAngles.y = asinf(Clamp(-2.0f * (q.x * q.z - q.w * q.y), -1.0f, 1.0f));
+		eulerAngles.z = atan2f(2.0f * (q.x * q.y + q.w * q.z), q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z);
 		return eulerAngles;
 	}
 
@@ -172,33 +148,25 @@ AX_ALIGNED(16) struct Quaternion
 
 	Vector3f GetForward() const {
 		Vector3f res;
-		SSEStoreVector3(&res.x,
-		    Quaternion::MulVec3(Vector432F( 0, 0, -1, 0), Quaternion::Conjugate(vec))
-		);
+		SSEStoreVector3(&res.x,MulVec3(Vector432F( 0, 0, -1, 0), Conjugate(vec)));
 		return res; 
 	}
 
 	Vector3f GetRight() const {
 		Vector3f res;
-		SSEStoreVector3(&res.x, 
-		    Quaternion::MulVec3(Vector432F( 1, 0, 0, 0), Quaternion::Conjugate(vec))
-		);
+		SSEStoreVector3(&res.x, MulVec3(Vector432F( 1, 0, 0, 0), Conjugate(vec)));
 		return res; 
 	}
 
 	Vector3f GetLeft() const {
 		Vector3f res;
-		SSEStoreVector3(&res.x,
-		    Quaternion::MulVec3(Vector432F(-1, 0, 0, 0), Quaternion::Conjugate(vec))
-		); 
+		SSEStoreVector3(&res.x, MulVec3(Vector432F(-1, 0, 0, 0), Conjugate(vec))); 
 		return res; 
 	}
 
 	Vector3f GetUp() const {
 		Vector3f res;
-		SSEStoreVector3(&res.x,
-		    Quaternion::MulVec3(Vector432F( 0, 1, 0, 0), Quaternion::Conjugate(vec))
-		);
+		SSEStoreVector3(&res.x, MulVec3(Vector432F( 0, 1, 0, 0), Conjugate(vec)));
 		return res; 
 	}
 

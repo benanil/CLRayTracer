@@ -1,6 +1,8 @@
 #include "Engine.hpp"
 #include "Editor/Editor.hpp"
 #include "Renderer.hpp"
+#include "Math/Transform.hpp"
+#include "Window.hpp"
 
 // things that I want to edit in editor
 // edit materials DONE
@@ -49,6 +51,9 @@ static void DisplayProfilerStats()
 }
 #endif
 
+static MeshHandle bmwMesh;
+static Transform bmwTransform = {};
+
 void Engine_Start()
 {
 	Editor::AddOnEditor(DisplayProfilerStats);
@@ -58,23 +63,48 @@ void Engine_Start()
 	
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 	MeshHandle bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
+	bmwTransform.SetPosition(0.0f, 5.50f, 0.0f);
+	bmwTransform.SetRotationEulerDegree(Vector3f(00.0f, 45.0f, 45.0f));
+	bmwTransform.SetScale(Vector3f(1.2f,1.2f, 1.2f));
+
+	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 
 	ResourceManager::PushMeshesToGPU();
 	ResourceManager::PushTexturesToGPU();
 	// todo create instances
 	Renderer::BeginInstanceRegister();
 
-	Renderer::RegisterMeshInstance(bmwMesh, ResourceManager::DefaultMaterial, float3(0.0f, 0.2f, 0.0f));
+	Renderer::RegisterMeshInstance(bmwMesh, ResourceManager::DefaultMaterial, bmwTransform.GetMatrix());
 
 	Renderer::EndInstanceRegister();
-	// create random sphere positions&colors
-	// Sphere sphere = Renderer::CreateSphere(2.0f, float3(5.0f, 0.0f, 0.0f));
-	// Renderer::PushSphere(sphere);
-	// Renderer::UpdateSpheres();
 }
 
 float Engine_Tick()
 {
+	float dt = (float)Window::DeltaTime();
+	static float rotation = 0.0f;
+	bool positionChanged = false;
+
+	bool pressing = Window::GetMouseButton(MouseButton_Right);
+
+	float speed = (dt * 5.0f) + (Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
+	Vector3f dir{};
+
+	if (!pressing && Window::GetKey(KeyCode_W)) dir -= Vector3f::Right(), positionChanged |= 1;
+	if (!pressing && Window::GetKey(KeyCode_S)) dir += Vector3f::Right(), positionChanged |= 1;
+	if (!pressing && Window::GetKey(KeyCode_A)) dir += Vector3f::Forward(), positionChanged |= 1;
+	if (!pressing && Window::GetKey(KeyCode_D)) dir -= Vector3f::Forward(), positionChanged |= 1;
+	
+	//bmwTransform.SetRotationEuler(Vector3f(0, rotation, 0));
+	rotation += dt * 0.5f;
+	
+	if (positionChanged)
+	{
+		dir = dir.Normalized();
+		bmwTransform.position += dir * speed;
+		bmwTransform.UpdatePosition();
+	}
+	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 	return SunAngle;
 }
 

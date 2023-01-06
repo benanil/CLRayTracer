@@ -81,7 +81,6 @@ typedef ushort MaterialHandle;
 //         create resources on cpu
 //         push to gpu
 //         flush cpu memory and fill it again
-
 namespace ResourceManager
 {
 	TextureHandle ImportTexture(const char* path);

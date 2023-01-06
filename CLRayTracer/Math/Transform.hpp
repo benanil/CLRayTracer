@@ -5,11 +5,11 @@
 class Transform
 {
 private:
-	Matrix4 transform;
+	Matrix4 transform{};
 public:
-	Vector3f position;
+	Vector3f position{};
 	bool needsUpdate = false;
-	Quaternion rotation;
+	Quaternion rotation{};
 	Vector3f scale {1, 1, 1};
 
 	Transform() {}
@@ -18,10 +18,10 @@ public:
 		this->scale = scale; needsUpdate = true;
 	}
 	
-	void SetPosition(Vector3f position) {
-		this->position = position; needsUpdate = true;
-	}
+	void SetPosition(Vector3f position) { this->position = position; needsUpdate = true; }
 	
+	void SetPosition(float x, float y, float z) { this->position.x = x; this->position.y = y; this->position.z = z; needsUpdate = true; }
+
 	void SetRotationEuler(Vector3f euler) {
 		this->rotation = Quaternion::FromEuler(euler); needsUpdate = true;
 	}
@@ -39,6 +39,18 @@ public:
 		this->rotation = Matrix4::ExtractRotation(matrix);
 		this->position = Matrix4::ExtractPosition(matrix);
 		this->scale    = Matrix4::ExtractScale(matrix);
+	}
+
+	void UpdateMatrix()
+	{
+		transform = Matrix4::Identity() * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale) * Matrix4::FromPosition(position);
+	}
+
+	void UpdatePosition()
+	{
+		transform.m[3][0] = position.x;
+		transform.m[3][1] = position.y;
+		transform.m[3][2] = position.z;
 	}
 
 	Matrix4& GetMatrix()

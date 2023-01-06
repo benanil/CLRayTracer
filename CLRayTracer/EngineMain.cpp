@@ -1,10 +1,11 @@
-#include "Renderer.hpp"
+﻿#include "Renderer.hpp"
 #include "Engine.hpp"
 #include "Window.hpp"
+#include "Logger.hpp"
 
 int main()
 {
-    if (!Window::Create()) return 0;
+	if (!Window::Create()) return 0;
     if (!Renderer::Initialize()) return 0;
 	Engine_Start();
 

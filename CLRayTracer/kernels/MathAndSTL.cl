@@ -22,6 +22,15 @@ float3 Mat3Mul(float3x3 m, float3 v) {
 	return m.x * v.xxx + m.y * v.yyy + m.z * v.zzz;
 }
 
+// transform vector
+float3 MatVecMul(Matrix4 m, float3 v) {
+	return (float3)(dot(m.x.xyz, v), dot(m.y.xyz, v), dot(m.z.xyz, v));
+}
+
+float3 MatPosMul(Matrix4 m, float3 v) {
+	return m.x.xyz * v.xxx + m.y.xyz * v.yyy + m.z.xyz * v.zzz;
+}
+
 float3 reflect(float3 v, float3 n) {
 	return v - n * dot(n, v) * 2.0f;
 }
@@ -32,7 +41,7 @@ float3 ACESFilm(float3 x) {
 
 float3 Saturation(float3 in, float change)
 {
-	float3 P = (float3)(sqrt(in.x * in.x * 0.299f + in.y * in.y * 0.587f + in.z * in.z * 0.114f));
+	float3 P = (float3)(sqrt(in.x * in.x * 0.299f + (in.y * in.y * 0.587f) + (in.z * in.z * 0.114f)));
 	return P + (in - P) * change; 
 }
 
@@ -130,7 +139,7 @@ int SampleSphereTexture(float3 position, float3 center, Texture texture)
 	float3 direction = fast_normalize(position - center);
 	int theta = (int)(atan2pi(direction.x, direction.z) * .5f * (float)(texture.width)); 
 	int phi   = (int)(acospi(direction.y) * (float)(texture.height)); 
-	return mad24(phi, texture.width, theta + texture.offset);
+	return phi * texture.width + (theta + texture.offset);
 }
 
 int SampleRotatedSphereTexture(float3 position, float3 center, float rotationx, float rotationy, Texture texture)

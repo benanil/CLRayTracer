@@ -39,15 +39,15 @@ namespace Editor::ResourcesWindow
 		std::vector<FileRecord*> files;
 	};
 
-	constexpr uint CppHash  = Random::ExtensionToHash(".cpp");
-	constexpr uint HlslHash = Random::ExtensionToHash(".hlsl");
-	constexpr uint HppHash  = Random::ExtensionToHash(".hpp");
-	constexpr uint MatHash  = Random::ExtensionToHash(".mat");
+	constexpr uint CppHash  = Random::PathToHash(".cpp");
+	constexpr uint HlslHash = Random::PathToHash(".hlsl");
+	constexpr uint HppHash  = Random::PathToHash(".hpp");
+	constexpr uint MatHash  = Random::PathToHash(".mat");
 
-	constexpr uint blendHash = Random::ExtensionToHash(".blend");
-	constexpr uint fbxHash   = Random::ExtensionToHash(".fbx");
-	constexpr uint objHash   = Random::ExtensionToHash(".obj");
-	constexpr uint cmeshHash = Random::ExtensionToHash(".cmesh");
+	constexpr uint blendHash = Random::PathToHash(".blend");
+	constexpr uint fbxHash   = Random::PathToHash(".fbx");
+	constexpr uint objHash   = Random::PathToHash(".obj");
+	constexpr uint cmeshHash = Random::PathToHash(".cmesh");
 
 	std::filesystem::path currentPath;
 
@@ -65,7 +65,7 @@ namespace Editor::ResourcesWindow
 
 	inline void* ExtensionToIcon(std::string& extension)
 	{
-		switch (Random::ExtensionToHash(extension.c_str())) // StringToHash Function is located in Helper.hpp
+		switch (Random::PathToHash(extension.c_str())) // StringToHash Function is located in Helper.hpp
 		{
 		case CppHash:  extension = "CPP";  return cppIcon;
 		case HlslHash: extension = "HLSL"; return hlslIcon;
@@ -98,7 +98,7 @@ namespace Editor::ResourcesWindow
 			void* icon = ExtensionToIcon(extension);
 
 			if (extension == ".png" or extension == ".jpg") {
-				const uint hash = Random::ExtensionToHash(filePath.c_str());
+				const uint hash = Random::PathToHash(filePath.c_str());
 				// Texture* texture = new Texture();
 				// if (AssetManager::TryGetTexture(texture, filePath, true)) {
 				// 	// if texture exist use that

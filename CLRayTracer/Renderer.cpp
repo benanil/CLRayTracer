@@ -12,6 +12,7 @@
 #include "Math/Camera.hpp"
 #include "Random.hpp"
 #include "Engine.hpp"
+#include <stdio.h>
 
 // todo: 
 //      dynamicly add meshes, spheres, textures, materials, skybox
@@ -23,26 +24,6 @@
 
 namespace 
 {
-	const GLchar* vertexShaderSource = "#version 330 core\n\
-noperspective out vec2 texCoord;\
-void main()\
-{\
-	float x = -1.0 + float((gl_VertexID & 1) << 2);\
-	float y = -1.0 + float((gl_VertexID & 2) << 1);\
-	texCoord.x = (x + 1.0) * 0.5;\
-	texCoord.y = (y + 1.0) * 0.5;\
-	gl_Position = vec4(x, y, 0, 1);\
-}";
-
-	const GLchar* fragmentShaderSource = "#version 330 core\n\
-out vec4 color;\
-noperspective in vec2 texCoord;\
-uniform sampler2D texture0;\
-void main()\
-{\
-	color = texture(texture0, texCoord);\
-}";
-
 	cl_context context;
 	cl_kernel traceKernel, rayGenKernel;
 	cl_command_queue command_queue;
@@ -61,6 +42,8 @@ void main()\
 	GLuint shaderProgram;
 	GLuint screenTexture;
 	Camera camera;
+	
+	cl_uint NumGPUCores;
 }
 
 typedef void (*GLFWglproc)(void);
@@ -88,64 +71,80 @@ void Renderer::RemoveSphere(SphereHandle sphere)
 	spheres[sphere] = spheres[NumSpheres--];
 }
 
-int Renderer::Initialize()
+static void InitializeOpenGL()
 {
-	camera = Camera(Window::GetWindowScale());
-
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-		AXERROR("Failed to initialize GLAD"); return 0;
+		assert(0, "Failed to initialize GLAD"); 
 	}
-	
-	// Build and compile our shader program
-	{
-		// Vertex shader
-		GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-		glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-		glCompileShader(vertexShader);
-		// Check for compile time errors
-		GLint success;
-		glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success); assert(success);
-		// Fragment shader
-		GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-		glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-		glCompileShader(fragmentShader);
-		// Check for compile time errors
-		glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success); assert(success);
-		// Link shaders
-		shaderProgram = glCreateProgram();
-		glAttachShader(shaderProgram, vertexShader);
-		glAttachShader(shaderProgram, fragmentShader);
-		glLinkProgram(shaderProgram);
-		// Check for linking errors
-		glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success); assert(success);
-	
-		glDeleteShader(vertexShader);
-		glDeleteShader(fragmentShader);
-		glUseProgram(shaderProgram);
 
-		CreateGLTexture(screenTexture, Window::GetWidth(), Window::GetHeight());
-		glActiveTexture(GL_TEXTURE0);
-		
-		// create empty vao unfortunately this step is necessary for ogl 3.2
-		glGenVertexArrays(1, &VAO);
-		glBindVertexArray(VAO);
-	}
-	// initialize openCL
-	
+	const GLchar* vertexShaderSource = "#version 330 core\n\
+		noperspective out vec2 texCoord;\
+		void main(){\
+			float x = -1.0 + float((gl_VertexID & 1) << 2);\
+			float y = -1.0 + float((gl_VertexID & 2) << 1);\
+			texCoord.x = (x + 1.0) * 0.5;\
+			texCoord.y = (y + 1.0) * 0.5;\
+			gl_Position = vec4(x, y, 0, 1);\
+		}";
+
+	const GLchar* fragmentShaderSource = "#version 330 core\n\
+		out vec4 color;\
+		noperspective in vec2 texCoord;\
+		uniform sampler2D texture0;\
+		void main(){\
+			color = texture(texture0, texCoord);\
+		}";
+	// Vertex shader
+	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+	glCompileShader(vertexShader);
+	// Check for compile time errors
+	GLint success;
+	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success); assert(success);
+	// Fragment shader
+	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+	glCompileShader(fragmentShader);
+	// Check for compile time errors
+	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success); assert(success);
+	// Link shaders
+	shaderProgram = glCreateProgram();
+	glAttachShader(shaderProgram, vertexShader);
+	glAttachShader(shaderProgram, fragmentShader);
+	glLinkProgram(shaderProgram);
+	// Check for linking errors
+	glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success); assert(success);
+
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+	glUseProgram(shaderProgram);
+
+	Renderer::CreateGLTexture(screenTexture, Window::GetWidth(), Window::GetHeight());
+	glActiveTexture(GL_TEXTURE0);
+
+	// create empty vao unfortunately this step is necessary for ogl 3.2
+	glGenVertexArrays(1, &VAO);
+	glBindVertexArray(VAO);
+}
+
+static void InitializeOpenCL()
+{
 	cl_uint num_of_platforms = 0;
 	cl_platform_id platform_id;
 	// retreives a list of platforms available
 	if (clGetPlatformIDs(1, &platform_id, &num_of_platforms) != CL_SUCCESS) {
-		AXERROR("Unable to get platform_id"); return 0;
+		fprintf(stderr, "Unable to get platform_id");  assert(0);
 	}
-	
+
 	cl_uint num_of_devices = 0;
 	cl_device_id device_id;
 	// try to get a supported GPU device
 	if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &num_of_devices) != CL_SUCCESS) {
-		AXERROR("Unable to get device_id"); return 0;
+		fprintf(stderr, "Unable to get device_id"); assert(0);
 	}
-	
+
+	clGetDeviceInfo(device_id, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(uint), &NumGPUCores, nullptr);
+	AXLOG("Num GPU Cores: %d", NumGPUCores);
 	// context properties list - must be terminated with 0
 	cl_context_properties properties[] =
 	{
@@ -154,33 +153,41 @@ int Renderer::Initialize()
 		CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id,
 		0
 	};
-	
+
 	// create a context with the GPU devices
 	context = clCreateContext(properties, 1, &device_id, NULL, NULL, &clerr);
 	// create command queue using the context and device
 	command_queue = clCreateCommandQueueWithProperties(context, device_id, nullptr, &clerr);
 
 	ResourceManager::Initialize(context, command_queue);
-	
+
 	// no need to delete this kernel code memory allocated from arena allocator
-	char* kernelCode = Helper::ReadCombineKernels(); 
-	if (!kernelCode) { return 0; }
-	
+	char* kernelCode = Helper::ReadCombineKernels();
+
 	program = clCreateProgramWithSource(context, 1, (const char**)&kernelCode, NULL, &clerr); assert(clerr == 0);
-	
+
 	// compile the program
-	if (clBuildProgram(program, 0, NULL, "-Werror -cl-single-precision-constant -cl-mad-enable", NULL, NULL) != CL_SUCCESS)
+	if (clBuildProgram(program, 0, NULL, "", NULL, NULL) != CL_SUCCESS) // -Werror -cl-single-precision-constant -cl-mad-enable
 	{
-		AXERROR("Error building program");
 		size_t param_value_size;
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &param_value_size);
 		char* buildLog = new char[param_value_size + 2]; buildLog[0] = '\n';
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, param_value_size, buildLog + 1, NULL);
-		AXERROR(buildLog); 
+		AXERROR(buildLog);
 		delete[] buildLog;
-		return 0;
+		fprintf(stderr, "\nError building program!");
+		assert(0);
 	}
+}
 
+int Renderer::Initialize()
+{
+	camera = Camera(Window::GetWindowScale());
+	
+	InitializeOpenGL();
+	InitializeOpenCL();
+
+	// initialize buffers
 	instanceMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(MeshInstance) * MaxNumInstances, nullptr, &clerr); assert(clerr == 0);
 	
 	rayMem = clCreateBuffer(context, 0, sizeof(Vector3f) * Window::GetWidth() * Window::GetHeight(), nullptr, &clerr); assert(clerr == 0);
@@ -190,7 +197,6 @@ int Renderer::Initialize()
 
 	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
 	sphereMem  = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(Sphere) * MaxNumSpheres, nullptr, &clerr); assert(clerr == 0);
-
 	return 1;
 }
 
@@ -223,19 +229,26 @@ void Renderer::BeginInstanceRegister() {
 }
 
 MeshInstanceHandle Renderer::RegisterMeshInstance(
-	 MeshHandle handle, MaterialHandle materialHandle, float3 position)
+	MeshHandle handle, MaterialHandle materialHandle, float3 position, const Quaternion& rotation, const float3& scale)
+{
+	Matrix4 matrix = Matrix4::Identity() * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale) * Matrix4::FromPosition(position);
+	return RegisterMeshInstance(handle, materialHandle, position, rotation, scale);
+}
+
+MeshInstanceHandle Renderer::RegisterMeshInstance(
+	MeshHandle handle, MaterialHandle materialHandle, const Matrix4& matrix)
 {
 	if (numMeshInstances >= MaxNumInstances) { AXERROR("too many mesh instances please reduce number of instances or increase number of instances!"); exit(0); }
 	
 	if (materialHandle == ResourceManager::DefaultMaterial) {
 		materialHandle = ResourceManager::GetMeshInfo(handle).materialStart;
 	}
+
 	MeshInstance& instance = meshInstances[numMeshInstances++];
+	instance.transform = matrix;
 	instance.meshIndex = handle;
 	instance.materialStart = materialHandle;
-	instance.position = position;
-	numRegisteredInstances++;
-	return numMeshInstances-1;
+	return numRegisteredInstances++;
 }
 
 void Renderer::EndInstanceRegister() {
@@ -249,6 +262,7 @@ static ushort numRemovedInstances = 0;
 static ushort MinUpdatedInstanceIndex = 0xFFFFu, MaxUpdatedInstanceIndex = 0u;
 static bool shouldUpdateInstances = 0;
 static bool hasRemovedInstances = 0;
+
 void Renderer::RemoveMeshInstance(MeshInstanceHandle handle) {
 	if (numRegisteredInstances == 0) { AXERROR("you cant remove mesh instances while registering instances!"); exit(0); }
 	hasRemovedInstances = true;
@@ -259,13 +273,29 @@ void Renderer::SetMeshInstanceMaterial(MeshInstanceHandle instanceHandle, Materi
 {
 	meshInstances[instanceHandle].materialStart = materialHandle; shouldUpdateInstances = true;
 	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
-	MaxUpdatedInstanceIndex = Max(instanceHandle, (uint)MaxUpdatedInstanceIndex);
+	MaxUpdatedInstanceIndex = Max(instanceHandle+1, (uint)MaxUpdatedInstanceIndex);
 }
 
-void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 position) {
-	meshInstances[instanceHandle].position = position; shouldUpdateInstances = true;
+void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 position)
+{
+	MeshInstance& instance = meshInstances[instanceHandle];
+	instance.transform.r[3] = SSESelect(instance.transform.r[3], _mm_setr_ps(position.x, position.y, position.z, 0), g_XMSelect1110); 
+	instance.inverseTransform = Matrix4::InverseTransform(instance.transform);
+
+	shouldUpdateInstances = true;
 	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
-	MaxUpdatedInstanceIndex = Max(instanceHandle, (uint)MaxUpdatedInstanceIndex);
+	MaxUpdatedInstanceIndex = Max(instanceHandle+1, (uint)MaxUpdatedInstanceIndex);
+}
+
+void Renderer::SetMeshMatrix(MeshInstanceHandle instanceHandle, const Matrix4& transform)
+{
+	MeshInstance& instance = meshInstances[instanceHandle];
+	instance.transform = transform;
+	instance.inverseTransform = Matrix4::InverseTransform(instance.transform);
+
+	shouldUpdateInstances = true;
+	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
+	MaxUpdatedInstanceIndex = Max(instanceHandle+1, (uint)MaxUpdatedInstanceIndex);	
 }
 
 void Renderer::ClearAllInstances() { numMeshInstances = 0; }
@@ -281,7 +311,7 @@ unsigned Renderer::Render(float sunAngle)
 		{
 			clEnqueueWriteBuffer(command_queue, instanceMem
 			  , true, MinUpdatedInstanceIndex * sizeof(MeshInstance)
-			  , MaxUpdatedInstanceIndex - MinUpdatedInstanceIndex * sizeof(MeshInstance)
+			  , (MaxUpdatedInstanceIndex - MinUpdatedInstanceIndex) * sizeof(MeshInstance)
 			  , meshInstances + MinUpdatedInstanceIndex, 0, 0, 0);
 			MinUpdatedInstanceIndex = 0xFFFFu; MaxUpdatedInstanceIndex = 0x0u;
 			shouldUpdateInstances = false;

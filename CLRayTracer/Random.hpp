@@ -27,18 +27,43 @@ namespace Random
 		return s; 
 	}
 
-	constexpr inline uint StringToHash(const char* str, unsigned hash = 0)
+	constexpr FINLINE uint64 MurmurHash(uint64 h) {
+		h ^= h >> 33ul;
+		h *= 0xff51afd7ed558ccdUL;
+		h ^= h >> 33ul;
+		h *= 0xc4ceb9fe1a85ec53UL;
+		h ^= h >> 33ul;
+		return h;
+	}
+
+	constexpr inline ulong StringToHash64(const char* str, ulong hash = 0)
 	{
-		while (*str) hash = *str++ + (hash << 6) + (hash << 16) - hash;
+		while (*str)
+			hash = *str++ + (hash << 6ull) + (hash << 16ull) - hash;
 		return hash;
 	}
 
-	constexpr inline uint ExtensionToHash(const char* str)
+	constexpr inline ulong PathToHash64(const char* str)
 	{
-		unsigned hash = 0u, shift = 0;
-		const char* ptr = str;
-		while (*str++) hash |= *str << shift, shift += 8, shift &= 32;
-	    return StringToHash(ptr+1, WangHash(hash));
+		ulong hash = 0u, idx = 0, shift = 0;
+		while (str[idx] && idx < 8)
+			hash |= ulong(str[idx]) << shift, shift += 8ull, idx++;
+		return StringToHash64(str + idx, MurmurHash(hash));
+	}
+
+	constexpr inline uint StringToHash(const char* str, uint hash = 0)
+	{
+		while (*str)
+			hash = *str++ + (hash << 6u) + (hash << 16u) - hash;
+		return hash;
+	}
+
+	constexpr inline uint PathToHash(const char* str)
+	{
+		uint hash = 0u, idx = 0u, shift = 0u;
+		while (str[idx] && idx < 4u)
+			hash |= uint(str[idx]) << shift, shift += 8u, idx++;
+		return StringToHash(str + idx, WangHash(hash));
 	}
 
 	class IRandom
@@ -47,49 +72,30 @@ namespace Random
 		virtual uint32 Next() = 0;
 		virtual uint64 Next64() = 0;
 
-		float NextFloat(float min, float max)
-		{
+		float NextFloat(float min, float max) {
 			return min + (NextFloat01() * fabsf(min - max));
 		}
-		float NextFloat01()
-		{
-			constexpr float c_FMul = (1.0 / 16777216.0f);
-			return float(Next() >> 8) * c_FMul;
+
+		float NextFloat01() {
+			return float(Next() >> 8) / 16777216.0f;
 		}
-		double NextDouble01()
-		{
-			constexpr double c_DMul = (1.0 / 4294967296.0);
-			return Next64() * c_DMul;
+
+		double NextDouble01() {
+			return (Next64() & 0x001FFFFFFFFFFFFF) / 9007199254740992.0;
 		}
-		double NextDouble(double min, double max)
-		{
+		
+		double NextDouble(double min, double max) {
 			return min + (NextDouble01() * fabs(min - max));
 		}
-		int NextInt(const int _min, const int _max)
-		{
-			return _min + NextBound(_max - _min);
-		}
-		uint32 NextUint32(uint32 min, uint32 max)
-		{
-			return min + NextBound(max - min);
-		}
-		uint64 NextUint64(uint64 min, uint64 max)
-		{
-			return min + NextBound(max - min);
-		}
+
+		int NextInt(const int _min, const int _max) { return _min + NextBound(_max - _min); }
+		uint32 NextUint32(uint32 min, uint32 max) { return min + NextBound(max - min); }
+		uint64 NextUint64(uint64 min, uint64 max) { return min + NextBound(max - min); }
+
 		/* returns a random number 0 <= x < bound */
-		int NextBound(int bound)
-		{
-			return Next() % bound;
-		}
-		uint32 NextBound(uint32 bound)
-		{
-			return Next() % bound;
-		}
-		uint64 NextBound(uint64 bound)
-		{
-			return Next64() % bound;
-		}
+		int    NextBound(int bound)    { return Next()   % bound; }
+		uint32 NextBound(uint32 bound) { return Next()   % bound; }
+		uint64 NextBound(uint64 bound) { return Next64() % bound; }
 	};
 
 	// https://www.pcg-random.org/index.html
@@ -102,8 +108,7 @@ namespace Random
 	public:
 		PCG() {}
 
-		PCG(uint64 seed)
-		{
+		PCG(uint64 seed) {
 			state = 0x853c49e6748fea9bULL;
 			inc = seed << 1 | 1u;
 		}
@@ -118,17 +123,7 @@ namespace Random
 		}
 
 		// returns a random number 0 <= x < IntMax
-		uint32 Next()
-		{
-			uint64 oldstate = state;
-			// Advance internal state
-			state = oldstate * 6364136223846793005ULL + (inc | 1);
-			// Calculate output function (XSH RR), uses old state for max ILP
-			uint64 xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
-			uint64 rot = oldstate >> 59u;
-			// if you get unary minus error disable sdl checks from msvc settings
-			return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
-		}
+		uint32 Next() { return uint32(Next64() & uint64(~0u)); }
 
 		uint64 Next64()
 		{
@@ -139,14 +134,23 @@ namespace Random
 			// if you get unary minus error disable sdl checks from msvc settings
 			return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
 		}
-	};
+	};            
 
+	template<typename T>
+	inline void Suffle(T* begin, uint64 len)
+	{
+		Random::PCG rand(Random::RandomSeed64());
+
+		for (uint64 i = len - 1; i > 1; --i)
+		{
+			Swap(begin[rand.NextBound(i)], begin[i]);
+		}
+	}
 
 	// Copyright (c) 2011, 2013 Mutsuo Saito, Makoto Matsumoto,
 	// Hiroshima University and The University of Tokyo. All rights reserved.
 	// generated from paper: http://www.math.sci.hiroshima-u.ac.jp/~m-mat/m_MT/ARTICLES/mt.pdf
 
-	// important: you need to create m_MT classes for each thread
 	// 	also I don't recommend using more than one instance in a therad
 
 	class MTwister64 : public IRandom
@@ -176,16 +180,7 @@ namespace Random
 			return int(x >> 16);
 		}
 
-		uint64 Next64()
-		{
-			if (m_Index >= N) GenerateNumbers();
-			uint64 x = m_MT[m_Index++];
-			x ^= x >> 11;
-			x ^= x << 7 & 0x9d2c5680ul;
-			x ^= x << 15 & 0xefc60000ul;
-			x ^= x >> 18;
-			return x;
-		}
+		uint64 Next64() { return uint32(Next() >> 16); }
 
 	private:
 
@@ -266,19 +261,17 @@ namespace Random
 			return y;
 		}
 
-		// in this case MTwister64 will be more performant
 		uint64 Next64()
 		{
 			if (m_Index + 1 >= SIZE) {
 				GenerateNumbers();
 				m_Index = 0;
 			}
-			uint64 y = m_MT[m_Index++];
-			uint64 y1 = m_MT[m_Index++];
-			y ^= y >> 11ul | (y1 >> 34ul);
-			y ^= y1 << 7ul | (y << 39ul) & 0x9d2c5680ul;
-			y ^= y << 15ul | (y1 << 47ul) & 0xefc60000ul;
-			y ^= y1 >> 18ul | (y >> 50ul);
+			uint64 y = m_MT[m_Index++] & (m_MT[m_Index++] << 32ul);
+			y ^= y >> 11ul;
+			y ^= y << 7ul  & (0x9d2c5680ul & (0x9d2c5680ul << 32ul)); 
+			y ^= y << 15ul & (0xefc60000ul & (0xefc60000ul << 32ul)); 
+			y ^= y >> 18ul;
 			return y;
 		}
 

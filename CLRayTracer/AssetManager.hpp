@@ -36,3 +36,6 @@ void AssetManagerTempFree(void* ptr);
 void* AssetManagerTempRealloc(void* ptr);
 
 void AssetManagerResetTempMemory();
+
+
+

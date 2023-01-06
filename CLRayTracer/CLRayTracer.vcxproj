@@ -173,8 +173,10 @@
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Algorithms.hpp" />
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="AssetManager.hpp" />
+    <ClInclude Include="Bitset.hpp" />
     <ClInclude Include="Editor\Editor.hpp" />
     <ClInclude Include="Editor\FontAwesome.hpp" />
     <ClInclude Include="Engine.hpp" />
@@ -194,6 +196,8 @@
     <ClInclude Include="quicklz.h" />
     <ClInclude Include="Renderer.hpp" />
     <ClInclude Include="ResourceManager.hpp" />
+    <ClInclude Include="Stack.hpp" />
+    <ClInclude Include="StaticHashmap.hpp" />
     <ClInclude Include="Timer.hpp" />
     <ClInclude Include="Window.hpp" />
   </ItemGroup>

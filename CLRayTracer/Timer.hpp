@@ -6,7 +6,7 @@
 #ifndef NDEBUG
 #	define CSTIMER(message) Timer timer = Timer(message);
 #else
-#   define CSTIMER(message) // Timer timer = Timer(message);
+#   define CSTIMER(message) Timer timer = Timer(message);
 #endif
 
 struct Timer

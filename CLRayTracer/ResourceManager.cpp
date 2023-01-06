@@ -225,8 +225,7 @@ void ResourceManager::PrepareMeshes() {
 void ResourceManager::PushTexturesToGPU()
 {
 	// reload all of it 
-	clerr = clEnqueueWriteBuffer(commandQueue, textureHandleMem, false
-	                     , 0 // offset
+	clerr = clEnqueueWriteBuffer(commandQueue, textureHandleMem, false, 0 // offset
 	                     , MaxTextures * sizeof(Texture) // size
 	                     , textures, 0, 0, 0); assert(clerr == 0);
 }

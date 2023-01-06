@@ -2,7 +2,7 @@
 #include "Math.hpp"
 #include <immintrin.h> 
 
-__declspec(align(16)) struct Vector4UI
+AX_ALIGNED(16) struct Vector4UI
 {
 	union
 	{
@@ -18,7 +18,7 @@ __declspec(align(16)) struct Vector4UI
 	Vector4UI(uint _x, uint _y, uint _z, uint _w) : x(_x), y(_y), z(_z), w(_w) {}
 };
 
-__declspec(align(16)) struct Vector432F
+AX_ALIGNED(16) struct Vector432F
 {
 	union
 	{
@@ -31,7 +31,7 @@ __declspec(align(16)) struct Vector432F
 	inline operator __m128d() const noexcept { return _mm_castps_pd(vec); }
 
 	Vector432F() : x(0), y(0), z(0), w(0) {}
-	Vector432F(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
+	constexpr Vector432F(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
 };
 
 constexpr uint32_t AX_SELECT_0 = 0x00000000;
@@ -104,7 +104,12 @@ FINLINE float VECTORCALL SSEVectorGetW(__m128 V) {
 	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _MM_SHUFFLE(3, 3, 3, 3)));
 }
 
-FINLINE __m128 VECTORCALL SSEVector3Normalize(const __m128 V)
+FINLINE __m128 VECTORCALL SSEVectorLength(const __m128 V)
+{
+	return _mm_sqrt_ps(_mm_dp_ps(V, V, 0x7f));
+}
+
+FINLINE __m128 VECTORCALL SSEVectorNormalize(const __m128 V)
 {
 	return _mm_mul_ps(_mm_rsqrt_ps(_mm_dp_ps(V, V, 0x7f)), V);
 }
@@ -132,6 +137,29 @@ FINLINE __m128 VECTORCALL SSEVector3Dot(const __m128 V1, const __m128 V2)
 	return _mm_permute_ps(vDot, _MM_SHUFFLE(0, 0, 0, 0));
 }
 
+// https://stackoverflow.com/questions/17863411/sse-multiplication-of-2-64-bit-integers
+FINLINE __m256i VECTORCALL Multiply64Bit(__m256i ab, __m256i cd)
+{
+	__m256i b = _mm256_srli_epi64(ab, 64);
+	__m256i bc = _mm256_mul_epu32(b, cd);
+	__m256i d = _mm256_srli_epi64(cd, 64);
+	__m256i ad = _mm256_mul_epu32(ab, d);
+	__m256i high = _mm256_add_epi64(bc, ad);
+	high = _mm256_slli_epi64(high, 64);
+	return _mm256_add_epi64(high, _mm256_mul_epu32(ab, cd));
+}
+
+FINLINE __m128i VECTORCALL Multiply64Bit(__m128i ab, __m128i cd)
+{
+	__m128i b = _mm_srli_epi64(ab, 32);
+	__m128i bc = _mm_mul_epu32(b, cd);
+	__m128i d = _mm_srli_epi64(cd, 32);
+	__m128i ad = _mm_mul_epu32(ab, d);
+	__m128i high = _mm_add_epi64(bc, ad);
+	high = _mm_slli_epi64(high, 32);
+	return _mm_add_epi64(high, _mm_mul_epu32(ab, cd));
+}
+
 FINLINE int VECTORCALL hsum_128_epi32avx(__m128i x)
 {
 	__m128i hi64 = _mm_unpackhi_epi64(x, x); // 3-operand non-destructive AVX lets us save a byte without needing a movdqa
@@ -139,6 +167,15 @@ FINLINE int VECTORCALL hsum_128_epi32avx(__m128i x)
 	__m128i hi32 = _mm_shuffle_epi32(sum64, _MM_SHUFFLE(2, 3, 0, 1));    // Swap the low two elements
 	__m128i sum32 = _mm_add_epi32(sum64, hi32);
 	return _mm_cvtsi128_si32(sum32);       // movd
+}
+
+FINLINE double VECTORCALL hsum_128_pdavx(__m128d x)
+{
+	__m128d hi64 = _mm_unpackhi_pd(x, x); // 3-operand non-destructive AVX lets us save a byte without needing a movdqa
+	__m128d sum64 = _mm_add_pd(hi64, x);
+	__m128d hi32 = _mm_shuffle_pd(sum64, sum64, _MM_SHUFFLE(2, 3, 0, 1));    // Swap the low two elements
+	__m128d sum32 = _mm_add_pd(sum64, hi32);
+	return _mm_cvtsd_f64(sum32);       // movd
 }
 
 FINLINE float VECTORCALL hsum_ps_sse3(__m128 v) {
@@ -155,6 +192,44 @@ FINLINE int VECTORCALL hsum_256_epi32(__m256i v)
 	return hsum_128_epi32avx(sum128);
 }
 
+FINLINE int VECTORCALL hsum_256_epi64(__m256i v)
+{
+	return _mm256_cvtsi256_si32(v) + _mm256_extract_epi64(v, 1) + _mm256_extract_epi64(v, 2) + _mm256_extract_epi64(v, 3);
+}
+
+FINLINE double VECTORCALL hsum_256_pd(__m256d v)
+{
+	__m128d sum128 = _mm_add_pd(_mm256_castpd256_pd128(v), _mm256_extractf128_pd(v, 1));
+	return hsum_128_pdavx(sum128);
+}
+
+// from: Faster Population Counts Using AVX2 Instructions resource paper
+FINLINE int VECTORCALL popcount256_epi64(__m256i v)
+{
+static const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2,
+		2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3,
+		1, 2, 2, 3, 2, 3, 3, 4);
+static const __m256i low_mask = _mm256_set1_epi8(0x0f);
+__m256i lo =  _mm256_and_si256(v, low_mask);
+__m256i hi = _mm256_and_si256(_mm256_srli_epi32(v, 4), low_mask);
+__m256i popcnt1 = _mm256_shuffle_epi8(lookup, lo);
+__m256i popcnt2 = _mm256_shuffle_epi8(lookup, hi);
+__m256i total = _mm256_add_epi8(popcnt1, popcnt2);
+v = _mm256_sad_epu8(total, _mm256_setzero_si256());
+return _mm256_cvtsi256_si32(v) + _mm256_extract_epi64(v, 1) + _mm256_extract_epi64(v, 2) + _mm256_extract_epi64(v, 3);
+}
+
+FINLINE __m256i VECTORCALL popcnt256si(__m256i v) // returns 4 64 bit integer that contains pop counts
+{
+	const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
+	const __m256i low_mask = _mm256_set1_epi8(0x0f);
+	__m256i lo = _mm256_and_si256(v, low_mask);
+	__m256i hi = _mm256_and_si256(_mm256_srli_epi32(v, 4), low_mask);
+	__m256i popcnt1 = _mm256_shuffle_epi8(lookup, lo);
+	__m256i popcnt2 = _mm256_shuffle_epi8(lookup, hi);
+	return _mm256_sad_epu8(_mm256_add_epi8(popcnt1, popcnt2), _mm256_setzero_si256());
+}
+
 FINLINE float VECTORCALL hsum256_ps_avx(__m256 v) {
 	__m128 vlow = _mm256_castps256_ps128(v);
 	__m128 vhigh = _mm256_extractf128_ps(v, 1); // high 128
@@ -162,7 +237,7 @@ FINLINE float VECTORCALL hsum256_ps_avx(__m256 v) {
 	return hsum_ps_sse3(vlow);         // and inline the sse3 version, which is optimal for AVX
 }
 
-FINLINE float VECTORCALL SSEVector3Length(const __m128 v)
+FINLINE float VECTORCALL SSEVectorLengthf(const __m128 v)
 {
 	return _mm_cvtss_f32(_mm_sqrt_ss(_mm_dp_ps(v, v, 0x71)));
 }

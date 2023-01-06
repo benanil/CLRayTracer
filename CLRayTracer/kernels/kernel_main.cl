@@ -56,7 +56,8 @@ typedef struct _Triout {
 } Triout;
 
 typedef struct _MeshInstance { 
-	float position[3]; // todo add rotation and scale aka matrix
+	Matrix4 transform;
+	Matrix4 inverseTransform;
 	ushort meshIndex, materialStart; 
 } MeshInstance;
 
@@ -207,14 +208,9 @@ kernel void Trace(
 	global const MeshInstance* meshInstances
 ) 
 {
-	const int i = get_global_id(0), j = get_global_id(1);
-	
-	// assert
-	if (sizeof(Triangle) != 64 + (16)) {
-		return write_imagef(screen, (int2)(i, j), (float4)(0.5f, 0.0f, 0.0f, 1.0f));
-	}
+	const int pixelX = get_global_id(0), pixelY = get_global_id(1);
 
-	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(j, get_image_width(screen), i), rays));
+	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(pixelY, get_image_width(screen), pixelX), rays));
 	
 	float3 lightDir = (float3)(0.0f, sin(trace_args.sunAngle), cos(trace_args.sunAngle)); // sun dir
 	lightDir *= max(dot(lightDir, (float3)(0.0f, -1.0f, 0.0f)), 0.2f);
@@ -229,31 +225,13 @@ kernel void Trace(
 		float roughness = 0.75f; // plane roughness
 		float shininess = 20.0f;
 		float3 specularColor = (float3)(0.8f, 0.7f, 0.6f);
-		// find intersectedsphere
-		// for (int i = 0; i < trace_args.numSpheres; ++i)  {
-		// 	IntersectSphere(vload3(0, spheres[i].position), spheres[i].radius, ray, &besthit, i);
-		// }
 		
 		if (IntersectPlane(ray, &besthit)) {
 			record.point = ray.origin + ray.direction * besthit.distance;
 			record.color = (float3)(70.0f / 255.0f, 70.0f/ 255.0f, 70.0f/ 255.0f);
 		}
-		// else {
-		// 	Sphere currentSphere = spheres[besthit.index];
-		// 	float3 center = vload3(0, currentSphere.position);
-		// 	record.point = ray.origin + ray.direction * besthit.distance;
-		// 	record.normal.xyz = normalize(record.point - center);
-		// 	float3 color = UnpackRGB8u(currentSphere.color);
-		// 	uchar textureIndex = currentSphere.color >> 24;
-		// 
-		// 	RGB8 pixel = SAMPLE_SPHERE_TEXTURE(record.point, center, textures[textureIndex]);
-		// 	record.color.xyz = color * UNPACK_RGB8(pixel);
-		// 	roughness = currentSphere.roughness;
-		// }
 
 		Ray meshRay;
-		meshRay.direction = ray.direction;
-
 		for (int i = 0; i < trace_args.numMeshes; ++i)
 		{
 			Triout triout;
@@ -261,7 +239,9 @@ kernel void Trace(
 			triout.triIndex = 0;
 			MeshInstance instance = meshInstances[i];
 			// change ray position instead of mesh position for capturing in different positions
-			meshRay.origin = ray.origin - vload3(0, instance.position);
+			meshRay.origin = MatMul(instance.inverseTransform, (float4)(ray.origin, 1.0f)).xyz;
+			meshRay.direction = MatMul(instance.inverseTransform, (float4)(ray.direction, 0.0f)).xyz;
+
 			// instance.meshIndex = bvhIndex
 			if (IntersectBVH(meshRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
 			{
@@ -302,8 +282,7 @@ kernel void Trace(
 	
 		// check Shadow
 		// Ray shadowRay = CreateRay(ray.origin, -lightDir);
-		float shadow = 1.0f; 
-		// todo shadow for only directional light
+		float shadow = 1.0f; // todo shadow for only directional light
 	
 		// Shade
 		float ndl = dot(record.normal, -lightDir);
@@ -321,7 +300,7 @@ kernel void Trace(
 	// result = Saturation(result, 1.2f);
 	// result = ACESFilm(result);
 
-	write_imagef(screen, (int2)(i, j), (float4)(pow(result, oneDivGamma), 1.0f));
+	write_imagef(screen, (int2)(pixelX, pixelY), (float4)(pow(result, oneDivGamma), 1.0f));
 }
 
 kernel void RayGen(int width, int height, global float* rays, Matrix4 inverseView, Matrix4 inverseProjection)

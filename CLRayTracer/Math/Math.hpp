@@ -20,6 +20,9 @@ FINLINE bool IsZero(const double x)	noexcept { return fabs(x)  <= 0.00001;  }
 FINLINE bool IsEqual(const float  x, const float  y) noexcept { return fabsf(x-y) <= 0.001f; }
 FINLINE bool IsEqual(const double x, const double y) noexcept { return fabs (x-y) <= 0.0001; }
 
+template<typename T> FINLINE constexpr 
+bool IsPowerOfTwo(T x) noexcept { return !(x&1) & (x != 0); }
+
 template<typename RealT>
 FINLINE RealT Repeat(const RealT t, const RealT length) noexcept
 {

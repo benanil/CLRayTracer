@@ -1,9 +1,11 @@
 #pragma once
 #include "ResourceManager.hpp"
+#include "Math/Matrix.hpp"
 
 // internal struct do not use
 struct MeshInstance { 
-	float3 position; // todo add rotation and scale aka matrix
+	Matrix4 transform; // todo add rotation and scale aka matrix
+	Matrix4 inverseTransform;
 	ushort meshIndex; 
 	ushort materialStart; // each submesh can have material
 };
@@ -25,13 +27,13 @@ namespace Renderer
 	void OnKeyPressed(int keyCode, int action);
 	void OnWindowResize(int width, int height);
 
-	
 	// called from everywhere
 	// spawns a mesh to the world
 	// spawning static objects first and dynamic objects afterwords will upgrade the speed of the rendering
 	// recomended to seperate the registering to two stages/areas left is static right is dynamic	
 	void BeginInstanceRegister();
-	MeshInstanceHandle RegisterMeshInstance(MeshHandle handle, MaterialHandle material, float3 position);
+	MeshInstanceHandle RegisterMeshInstance(MeshHandle handle, MaterialHandle material, const Matrix4& mat);
+	MeshInstanceHandle RegisterMeshInstance(MeshHandle handle, MaterialHandle material, float3 position, const Quaternion& rotation, const float3& scale);
 	void EndInstanceRegister();
 	void RemoveMeshInstance(MeshInstanceHandle  handle);
 	void ClearAllInstances();
@@ -58,6 +60,12 @@ namespace Renderer
 
 	void SetMeshInstanceMaterial(MeshInstanceHandle meshHandle, MaterialHandle materialHandle);
 	
-	void SetMeshPosition(MeshInstanceHandle  handle, float3 position);
+	void SetMeshPosition(MeshInstanceHandle handle, float3 position);
+	void SetMeshMatrix(MeshInstanceHandle handle, const Matrix4& matrix);
 	// todo rotation scale 
 }
+
+
+
+
+
