@@ -5,11 +5,17 @@ struct Matrix3
 {
 	union
 	{
-		float m[3][3];
+		float m[3][3] = {0};
 		Vector3f vec[3];
+		struct { Vector3f x, y, z; };
 	};
 
-	Matrix3() {}
+	Matrix3() 
+	{
+		m[0][0] = 1.0f;
+		m[1][1] = 1.0f;
+		m[2][2] = 1.0f;
+	}
 
 	inline static Matrix3 LookAt(Vector3f direction, Vector3f up)
 	{
@@ -19,6 +25,34 @@ struct Matrix3
 		result.vec[0] = Right * rsqrt(Max(0.00001f, Vector3f::Dot(Right, Right)));
 		result.vec[1] = Vector3f::Cross(result.vec[2], result.vec[0]);
 		return result;
+	}
+
+	inline Matrix3 static Multiply(const Matrix3& a, const Matrix3& b)
+	{
+		Matrix3 result;
+		float3 vx = a.x.xxx() * b.x;
+		float3 vy = a.x.yyy() * b.y;
+		float3 vz = a.x.zzz() * b.z;
+
+		vx += vz; vx += vy;
+		result.x = vx;
+
+		vx = a.y.xxx() * b.x;
+		vy = a.y.yyy() * b.y;
+		vz = a.y.zzz() * b.z;
+		vx += vz; vx += vy;
+		result.y = vx;
+
+		vx = a.z.xxx() * b.x;
+		vy = a.z.yyy() * b.y;
+		vz = a.z.zzz() * b.z;
+		vx += vz; vx += vy;
+		result.z = vx;
+		return result;
+	}
+
+	float3 Mat3Mul(Matrix3 m, float3 v) {
+		return m.x * v.xxx() + m.y * v.yyy() + m.z * v.zzz();
 	}
 
 	static Matrix3 FromQuaternion(Quaternion q)
@@ -253,7 +287,7 @@ AX_ALIGNED(16) struct Matrix4
 		                  _mm_mul_ps(VecSwizzle(vec1, 1, 0, 3, 2), VecSwizzle(vec2, 2, 1, 2, 1)));
 	}
 
-	// from directx math:  xnamathmatrix.inl
+	// this will not work on camera matrix this is for only transformation matricies
 	inline Matrix4 static VECTORCALL InverseTransform(const Matrix4 inM) noexcept
 	{
 		Matrix4 out;
@@ -427,91 +461,37 @@ AX_ALIGNED(16) struct Matrix4
 
 	static Quaternion VECTORCALL ExtractRotation(const Matrix4 M, bool rowNormalize = true) noexcept
 	{
-		static const Vector432F XMPMMP = { +1.0f, -1.0f, -1.0f, +1.0f };
-		static const Vector432F XMMPMP = { -1.0f, +1.0f, -1.0f, +1.0f };
-		static const Vector432F XMMMPP = { -1.0f, -1.0f, +1.0f, +1.0f };
+		int i, j, k = 0;
+		float root, trace = M.m[0][0] + M.m[1][1] + M.m[2][2];
+		Quaternion Orientation;
 
-		__m128 r0 = M.r[0];  // (r00, r01, r02, 0)
-		__m128 r1 = M.r[1];  // (r10, r11, r12, 0)
-		__m128 r2 = M.r[2];  // (r20, r21, r22, 0)
+		if (trace > 0.0f)
+		{
+			root = sqrtf(trace + 1.0f);
+			Orientation.w = 0.5f * root;
+			root = 0.5f / root;
+			Orientation.x = root * (M.m[1][2] - M.m[2][1]);
+			Orientation.y = root * (M.m[2][0] - M.m[0][2]);
+			Orientation.z = root * (M.m[0][1] - M.m[1][0]);
+		}
+		else
+		{
+			static int Next[3] = { 1, 2, 0 };
+			i = 0;
+			if (M.m[1][1] > M.m[0][0]) i = 1;
+			if (M.m[2][2] > M.m[i][i]) i = 2;
+			j = Next[i];
+			k = Next[j];
 
-		// (r00, r00, r00, r00)
-		__m128 r00 = _mm_permute_ps(r0, _MM_SHUFFLE(0, 0, 0, 0));
-		// (r11, r11, r11, r11)
-		__m128 r11 = _mm_permute_ps(r1, _MM_SHUFFLE(1, 1, 1, 1));
-		// (r22, r22, r22, r22)
-		__m128 r22 = _mm_permute_ps(r2, _MM_SHUFFLE(2, 2, 2, 2));
+			root = sqrtf(M.m[i][i] - M.m[j][j] - M.m[k][k] + 1.0f);
 
-		// x^2 >= y^2 equivalent to r11 - r00 <= 0
-		// (r11 - r00, r11 - r00, r11 - r00, r11 - r00)
-		__m128 r11mr00 = _mm_sub_ps(r11, r00);
-		__m128 x2gey2 = _mm_cmple_ps(r11mr00, g_XMZero);
-
-		// z^2 >= w^2 equivalent to r11 + r00 <= 0
-		// (r11 + r00, r11 + r00, r11 + r00, r11 + r00)
-		__m128 r11pr00 = _mm_add_ps(r11, r00);
-		__m128 z2gew2 = _mm_cmple_ps(r11pr00, g_XMZero);
-
-		// x^2 + y^2 >= z^2 + w^2 equivalent to r22 <= 0
-		__m128 x2py2gez2pw2 = _mm_cmple_ps(r22, g_XMZero);
-
-		// (4*x^2, 4*y^2, 4*z^2, 4*w^2)
-		__m128 t0 = _mm_fmadd_ps(XMPMMP, r00, g_XMOne);
-		__m128 t1 = _mm_mul_ps(XMMPMP, r11);
-		__m128 t2 = _mm_fmadd_ps(XMMMPP, r22, t0);
-		__m128 x2y2z2w2 = _mm_add_ps(t1, t2);
-
-		// (r01, r02, r12, r11)
-		t0 = _mm_shuffle_ps(r0, r1, _MM_SHUFFLE(1, 2, 2, 1));
-		// (r10, r10, r20, r21)
-		t1 = _mm_shuffle_ps(r1, r2, _MM_SHUFFLE(1, 0, 0, 0));
-		// (r10, r20, r21, r10)
-		t1 = _mm_permute_ps(t1, _MM_SHUFFLE(1, 3, 2, 0));
-		// (4*x*y, 4*x*z, 4*y*z, unused)
-		__m128 xyxzyz = _mm_add_ps(t0, t1);
-
-		// (r21, r20, r10, r10)
-		t0 = _mm_shuffle_ps(r2, r1, _MM_SHUFFLE(0, 0, 0, 1));
-		// (r12, r12, r02, r01)
-		t1 = _mm_shuffle_ps(r1, r0, _MM_SHUFFLE(1, 2, 2, 2));
-		// (r12, r02, r01, r12)
-		t1 = _mm_permute_ps(t1, _MM_SHUFFLE(1, 3, 2, 0));
-		// (4*x*w, 4*y*w, 4*z*w, unused)
-		__m128 xwywzw = _mm_sub_ps(t0, t1);
-		xwywzw = _mm_mul_ps(XMMPMP, xwywzw);
-
-		// (4*x^2, 4*y^2, 4*x*y, unused)
-		t0 = _mm_shuffle_ps(x2y2z2w2, xyxzyz, _MM_SHUFFLE(0, 0, 1, 0));
-		// (4*z^2, 4*w^2, 4*z*w, unused)
-		t1 = _mm_shuffle_ps(x2y2z2w2, xwywzw, _MM_SHUFFLE(0, 2, 3, 2));
-		// (4*x*z, 4*y*z, 4*x*w, 4*y*w)
-		t2 = _mm_shuffle_ps(xyxzyz, xwywzw, _MM_SHUFFLE(1, 0, 2, 1));
-
-		// (4*x*x, 4*x*y, 4*x*z, 4*x*w)
-		__m128 tensor0 = _mm_shuffle_ps(t0, t2, _MM_SHUFFLE(2, 0, 2, 0));
-		// (4*y*x, 4*y*y, 4*y*z, 4*y*w)
-		__m128 tensor1 = _mm_shuffle_ps(t0, t2, _MM_SHUFFLE(3, 1, 1, 2));
-		// (4*z*x, 4*z*y, 4*z*z, 4*z*w)
-		__m128 tensor2 = _mm_shuffle_ps(t2, t1, _MM_SHUFFLE(2, 0, 1, 0));
-		// (4*w*x, 4*w*y, 4*w*z, 4*w*w)
-		__m128 tensor3 = _mm_shuffle_ps(t2, t1, _MM_SHUFFLE(1, 2, 3, 2));
-
-		// Select the row of the tensor-product matrix that has the largest
-		// magnitude.
-		t0 = _mm_and_ps(x2gey2, tensor0);
-		t1 = _mm_andnot_ps(x2gey2, tensor1);
-		t0 = _mm_or_ps(t0, t1);
-		t1 = _mm_and_ps(z2gew2, tensor2);
-		t2 = _mm_andnot_ps(z2gew2, tensor3);
-		t1 = _mm_or_ps(t1, t2);
-		t0 = _mm_and_ps(x2py2gez2pw2, t0);
-		t1 = _mm_andnot_ps(x2py2gez2pw2, t1);
-		t2 = _mm_or_ps(t0, t1);
-
-		// Normalize the row.  No division by zero is possible because the
-		// quaternion is unit-length (and the row is a nonzero multiple of
-		// the quaternion).
-		return SSEVectorNormalize(t2);
+			Orientation[i ] = 0.5f * root;
+			root = 0.5f / root;
+			Orientation[j] = root * (M.m[i][j] + M.m[j][i]);
+			Orientation[k] = root * (M.m[i][k] + M.m[k][i]);
+			Orientation.w = root * (M.m[j][k] - M.m[k][j]);
+		} 
+		return Orientation;
 	}
 
 	static Matrix4 VECTORCALL FromQuaternion(const Quaternion quaternion)

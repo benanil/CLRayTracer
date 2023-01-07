@@ -68,6 +68,7 @@ void Engine_Start()
 	
 	bmwTransform.SetPosition(0.0f, 1.20f, 0.0f);
 
+	bmwTransform.SetMatrix(bmwTransform.GetMatrix());
 	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 
 	ResourceManager::PushMeshesToGPU();
@@ -101,13 +102,14 @@ float Engine_Tick()
 
 	bmwTransform.SetRotationEuler(Vector3f(0, rotation, 0));
 	rotation += dt * 0.25f;
-	
+
 	if (positionChanged && dir.LengthSquared() > 0.1f)
 	{
 		dir = dir.Normalized();
 		bmwTransform.position += dir * speed;
 		// bmwTransform.UpdatePosition();
 	}
+	bmwTransform.SetMatrix(bmwTransform.GetMatrix());
 	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 	return SunAngle;
 }

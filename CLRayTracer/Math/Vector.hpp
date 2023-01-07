@@ -164,6 +164,10 @@ struct Vector3
 	Vector3 operator /= (T o) { x /= o; y /= o; z /= o; return *this; }
 	Vector3 operator -= (T o) { x -= o; y -= o; z -= o; return *this; }
 
+	Vector3 xxx() { return Vector3(x, x, x); }
+	Vector3 yyy() { return Vector3(y, y, y); }
+	Vector3 zzz() { return Vector3(z, z, z); }
+
 	static constexpr Vector3 Zero()    { return Vector3(0.0, 0.0, 0.0); }
 	static constexpr Vector3 One()     { return Vector3(1.0, 1.0, 1.0); }
 	static constexpr Vector3 Up()      { return Vector3(0.0, 1.0, 0.0); }

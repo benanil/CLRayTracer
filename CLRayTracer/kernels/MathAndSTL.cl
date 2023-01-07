@@ -44,7 +44,29 @@ Matrix4 MatMatMul(Matrix4 a, Matrix4 b) {
 	vw = a.w.wwww * b.w;
 	vx += vz; vy += vw; vx += vy;
 	result.w = vx;
+	return result;
+}
 
+Matrix3 Mat3Mat3Mul(Matrix3 a, Matrix3 b) {
+	Matrix3 result;
+	float3 vx = a.x.xxxx * b.x;
+	float3 vy = a.x.yyyy * b.y;
+	float3 vz = a.x.zzzz * b.z;
+
+	vx += vz; vx += vy;
+	result.x = vx;
+
+	vx = a.y.xxxx * b.x;
+	vy = a.y.yyyy * b.y;
+	vz = a.y.zzzz * b.z;
+	vx += vz; vx += vy;
+	result.y = vx;
+
+	vx = a.z.xxxx * b.x;
+	vy = a.z.yyyy * b.y;
+	vz = a.z.zzzz * b.z;
+	vx += vz; vx += vy;
+	result.z = vx;
 	return result;
 }
 

@@ -39,6 +39,7 @@ public:
 		this->rotation = Matrix4::ExtractRotation(matrix);
 		this->position = Matrix4::ExtractPosition(matrix);
 		this->scale    = Matrix4::ExtractScale(matrix);
+		this->transform = matrix;
 	}
 
 	void UpdateMatrix()
