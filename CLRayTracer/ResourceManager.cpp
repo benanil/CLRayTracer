@@ -32,7 +32,7 @@
 // 50mb for textures
 constexpr size_t MAX_TEXTURE_MEMORY = 1.049e+7 * 10;
 // max num of tris for each gpu push
-constexpr size_t MAX_TRIANGLES = 1'000'000;
+constexpr size_t MAX_TRIANGLES = 1'200'000;
 constexpr size_t MAX_BVHNODES = MAX_TRIANGLES / 2;
 constexpr size_t MAX_BVHMEMORY = MAX_BVHNODES * sizeof(BVHNode);
 constexpr size_t MAX_MESH_MEMORY = MAX_TRIANGLES * sizeof(Tri) + MAX_BVHMEMORY ;
@@ -234,7 +234,7 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 {
 	MeshInfo& meshInfo = meshInfos[numMeshes];
 	ObjMesh* mesh = nullptr;
-	mesh = AssetManager_ImportMesh(path, (Tri*)meshArena + meshArenaOffset);
+	mesh = AssetManager_ImportMesh(path, (Tri*)(meshArena + meshArenaOffset));
 	meshInfo.materialStart = mesh->numMaterials  ? numMaterials : 0;
 	meshInfo.triangleStart = meshArenaOffset / sizeof(Tri);
 	meshInfo.numTriangles = mesh->numTris;

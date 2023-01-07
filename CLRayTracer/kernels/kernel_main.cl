@@ -241,6 +241,7 @@ kernel void Trace(
 			// change ray position instead of mesh position for capturing in different positions
 			meshRay.origin = MatMul(instance.inverseTransform, (float4)(ray.origin, 1.0f)).xyz;
 			meshRay.direction = MatMul(instance.inverseTransform, (float4)(ray.direction, 0.0f)).xyz;
+			Matrix3 inverseTransposed = TransposeToMatrix3(instance.inverseTransform);
 
 			// instance.meshIndex = bvhIndex
 			if (IntersectBVH(meshRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
@@ -250,13 +251,18 @@ kernel void Trace(
 				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
 
 				record.point = meshRay.origin + triout.t * meshRay.direction;
-				record.normal = convert_float3(vload3(0, triangle.normal0)) / 32766.0f * baryCentrics.x // fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x));
-					          + convert_float3(vload3(0, triangle.normal1)) / 32766.0f * baryCentrics.y
-					          + convert_float3(vload3(0, triangle.normal2)) / 32766.0f * baryCentrics.z;
 
-				float2 uv = convert_float2(vload2(0, triangle.uv0)) / 32766.0f * baryCentrics.x 
-					      + convert_float2(vload2(0, triangle.uv1)) / 32766.0f * baryCentrics.y
-					      + convert_float2(vload2(0, triangle.uv2)) / 32766.0f * baryCentrics.z;
+				float3 n0 = Mat3Mul(inverseTransposed, convert_float3(vload3(0, triangle.normal0))); 
+				float3 n1 = Mat3Mul(inverseTransposed, convert_float3(vload3(0, triangle.normal1)));
+				float3 n2 = Mat3Mul(inverseTransposed, convert_float3(vload3(0, triangle.normal2)));
+
+				record.normal = ((n0 / 32766.0f) * baryCentrics.x) // fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x));
+					          + ((n1 / 32766.0f) * baryCentrics.y)
+					          + ((n2 / 32766.0f) * baryCentrics.z);
+
+				float2 uv = ((convert_float2(vload2(0, triangle.uv0)) / 32766.0f) * baryCentrics.x) 
+					      + ((convert_float2(vload2(0, triangle.uv1)) / 32766.0f) * baryCentrics.y)
+					      + ((convert_float2(vload2(0, triangle.uv2)) / 32766.0f) * baryCentrics.z);
 				
 				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
 				RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], uv)];
@@ -277,7 +283,7 @@ kernel void Trace(
 		}
 	
 		ray.origin = record.point;
-		ray.origin += record.normal * 0.001f;
+		ray.origin += record.normal * 0.01f;
 		ray.direction = reflect(ray.direction, record.normal); // wo = ray.direction now = outgoing ray direction
 	
 		// check Shadow

@@ -43,7 +43,7 @@ public:
 
 	void UpdateMatrix()
 	{
-		transform = Matrix4::Identity() * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale) * Matrix4::FromPosition(position);
+		transform = Matrix4::Identity() * Matrix4::FromPosition(position) * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale);
 	}
 
 	void UpdatePosition()
@@ -56,7 +56,7 @@ public:
 	Matrix4& GetMatrix()
 	{
 		if (needsUpdate) {
-			transform = Matrix4::Identity() * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale) * Matrix4::FromPosition(position);
+			transform = Matrix4::Identity() * Matrix4::FromPosition(position) * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale);
 		}
 		return transform;
 	}
@@ -64,8 +64,7 @@ public:
 	Vector3f GetEuler()       const { return Quaternion::ToEulerAngles(rotation); }
 	Vector3f GetEulerDegree() const { return Quaternion::ToEulerAngles(rotation) * RadToDeg; }
 
-	Vector3f GetForward() const { return rotation.GetForward();  }
-	Vector3f GetRight()   const { return rotation.GetRight();    }
-	Vector3f GetLeft()    const { return rotation.GetLeft();     }
-	Vector3f GetUp()      const { return rotation.GetUp();       }
+	Vector3f GetForward() const { return Vector3f(transform.m[2][0], transform.m[2][1], transform.m[2][2]); }
+	Vector3f GetUp()      const { return Vector3f(transform.m[1][0], transform.m[1][1], transform.m[1][2]); }
+	Vector3f GetRight()   const { return Vector3f(transform.m[0][0], transform.m[0][1], transform.m[0][2]); }
 };

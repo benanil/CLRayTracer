@@ -10,15 +10,76 @@ typedef struct _Matrix {
 	float4 x, y, z, w;
 } Matrix4;
 
-typedef struct _float3x3 {
+typedef struct _Matrix3 {
 	float3 x, y, z;
-} float3x3;
+} Matrix3;
+
+Matrix4 MatMatMul(Matrix4 a, Matrix4 b) {
+	Matrix4 result;
+	float4 vx = a.x.xxxx * b.x;
+	float4 vy = a.x.yyyy * b.y;
+	float4 vz = a.x.zzzz * b.z;
+	float4 vw = a.x.wwww * b.w;
+
+	vx += vz; vy += vw; vx += vy;
+	result.x = vx;
+
+	vx = a.y.xxxx * b.x;
+	vy = a.y.yyyy * b.y;
+	vz = a.y.zzzz * b.z;
+	vw = a.y.wwww * b.w;
+	vx += vz; vy += vw; vx += vy;
+	result.y = vx;
+
+	vx = a.z.xxxx * b.x;
+	vy = a.z.yyyy * b.y;
+	vz = a.z.zzzz * b.z;
+	vw = a.z.wwww * b.w;
+	vx += vz; vy += vw; vx += vy;
+	result.z = vx;
+
+	vx = a.w.xxxx * b.x;
+	vy = a.w.yyyy * b.y;
+	vz = a.w.zzzz * b.z;
+	vw = a.w.wwww * b.w;
+	vx += vz; vy += vw; vx += vy;
+	result.w = vx;
+
+	return result;
+}
+
+Matrix4 Transpose(Matrix4 M)
+{
+	float4 vTemp1 = shuffle2(M.x, M.y, (uint4)(0, 1, 4, 5));
+	float4 vTemp3 = shuffle2(M.x, M.y, (uint4)(2, 3, 6, 7));
+	float4 vTemp2 = shuffle2(M.z, M.w, (uint4)(0, 1, 4, 5));
+	float4 vTemp4 = shuffle2(M.z, M.w, (uint4)(2, 3, 6, 7));
+	Matrix4 mResult;
+	mResult.x = shuffle2(vTemp1, vTemp2, (uint4)(0, 2, 4, 6));
+	mResult.y = shuffle2(vTemp1, vTemp2, (uint4)(1, 3, 5, 7));
+	mResult.z = shuffle2(vTemp3, vTemp4, (uint4)(0, 2, 4, 6));
+	mResult.w = shuffle2(vTemp3, vTemp4, (uint4)(1, 3, 5, 7));
+	return mResult;
+}
+
+Matrix3 TransposeToMatrix3(Matrix4 M)
+{
+	float4 vTemp1 = shuffle2(M.x, M.y, (uint4)(0, 1, 4, 5));
+	float4 vTemp3 = shuffle2(M.x, M.y, (uint4)(2, 3, 6, 7));
+	float4 vTemp2 = shuffle2(M.z, M.w, (uint4)(0, 1, 4, 5));
+	float4 vTemp4 = shuffle2(M.z, M.w, (uint4)(2, 3, 6, 7));
+	Matrix3 mResult;
+	mResult.x = shuffle2(vTemp1, vTemp2, (uint4)(0, 2, 4, 6)).xyz;
+	mResult.y = shuffle2(vTemp1, vTemp2, (uint4)(1, 3, 5, 7)).xyz;
+	mResult.z = shuffle2(vTemp3, vTemp4, (uint4)(0, 2, 4, 6)).xyz;
+	return mResult;
+}
 
 float4 MatMul(Matrix4 m, float4 v) {
 	return m.x * v.xxxx + m.y * v.yyyy + m.z * v.zzzz + m.w * v.wwww;
 }
 
-float3 Mat3Mul(float3x3 m, float3 v) {
+float3 Mat3Mul(Matrix3 m, float3 v) {
 	return m.x * v.xxx + m.y * v.yyy + m.z * v.zzz;
 }
 
@@ -48,7 +109,7 @@ float3 Saturation(float3 in, float change)
 float Max3(float3 a) { return fmax(fmax(a.x, a.y), a.z); }
 float Min3(float3 a) { return fmin(fmin(a.x, a.y), a.z); }
 
-float3x3 GetTangentSpace(float3 normal)
+Matrix3 GetTangentSpace(float3 normal)
 {
 	// Choose a helper vector for the cross product
 	float3 helper = (float3)(1.0f, 0.0f, 0.0f);
@@ -56,7 +117,7 @@ float3x3 GetTangentSpace(float3 normal)
 	// Generate vectors
 	float3 tangent  = normalize(cross(normal, helper));
 	float3 binormal = normalize(cross(normal, tangent));
-	float3x3 mat;
+	Matrix3 mat;
 	mat.x = tangent; mat.y = binormal; mat.z = normal;
 	return mat;
 }
