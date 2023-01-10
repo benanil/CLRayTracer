@@ -33,18 +33,18 @@
 constexpr size_t MAX_TEXTURE_MEMORY = 1.049e+7 * 10;
 // max num of tris for each gpu push
 constexpr size_t MAX_TRIANGLES = 1'200'000;
-constexpr size_t MAX_BVHNODES = MAX_TRIANGLES / 2;
+constexpr size_t MAX_BVHNODES = MAX_TRIANGLES;
 constexpr size_t MAX_BVHMEMORY = MAX_BVHNODES * sizeof(BVHNode);
-constexpr size_t MAX_MESH_MEMORY = MAX_TRIANGLES * sizeof(Tri) + MAX_BVHMEMORY ;
+constexpr size_t MAX_MESH_MEMORY = MAX_TRIANGLES * sizeof(Tri);
 constexpr size_t MaxTextures = 32;
 constexpr size_t MaxMaterials = 256;
 constexpr size_t MaxMeshes = 128;
 
-// todo add save load, we can use same arena allocators for each scene
-// todo map unmap texture at real time we can create effects with it
-// todo add ability to deform meshes with kernels at runtime
-// todo add Physics namespace and ray cast on gpu, send ray array and return hit info array execute kernel
-// you can even write your own physics
+// Todo:
+//      map unmap texture at real time we can create effects with it
+//      add ability to deform meshes with kernels at runtime
+//      add save load, we can use same arena allocators for each scene
+//      add Physics namespace and ray cast on gpu, send ray array and return hit info array execute kernel
 
 namespace ResourceManager
 {
@@ -55,29 +55,37 @@ namespace ResourceManager
 
 	Texture textures[MaxTextures];
 	uint bvhIndices[MaxMeshes];
+	uint numberOfBVH = 0;
 
 	// [sword materials one per each submesh], [another sword materials for same mesh], [box materials], [armor materials], [armor materials 2]
 	// we will index these material arrays for each mesh instance
 	Material materials[MaxMaterials];
 	ObjMesh* meshObjs[MaxMeshes];
+	BVHNode* bvhNodes = nullptr;
 
 	MeshInfo meshInfos[MaxMeshes];
 	TextureInfo textureInfos[MaxTextures];
 	MaterialInfo materialInfos[MaxMaterials];
 
-	unsigned char* meshArena;    // for each scene we will use same memory
+	Tri* triangles;    // for each scene we will use same memory
 	unsigned char* iconStaging;
 
-	size_t meshArenaOffset    = 0; // CPU offset 
+	size_t numTriangles = 0; 
 
 	size_t lastTextureOffset = 0; // GPU offset
-	size_t lastMeshOffset    = 0; // GPU offset
-	size_t lastBVHOffset     = 0; // GPU offset
+	size_t lastTriangleCount = 0; // GPU offset
+	size_t lastBVHIndex      = 0; // GPU offset
 
-	int numTextures  = 0;
-	int numMeshes    = 0;
-	int numMaterials = 0;
+	int numTextures   = 0;
+	int numMeshes     = 0;
+	int numMaterials  = 0;
 	int lastMeshIndex = 0;
+
+	BVHNode* GetBVHNodes()   { return bvhNodes; }
+	uint* GetBVHIndices()    { return bvhIndices; }
+	Tri* GetTriangles()      { return triangles; }
+	Material* GetMaterials() { return materials; }
+	Texture* GetTextures()   { return textures; }
 
 	MeshInfo GetMeshInfo(MeshHandle handle)          { return meshInfos[handle];    }
 	TextureInfo GetTextureInfo(TextureHandle handle) { return textureInfos[handle]; }
@@ -94,8 +102,6 @@ namespace ResourceManager
 	}
 
 	ushort GetNumMeshes() { return numMeshes; };
-
-	void* GetAreaPointer() { return (void*)meshArena; } // unsafe
 
 #ifndef IMUI_DISABLE
 	void DrawMaterialsWindow()
@@ -121,6 +127,7 @@ namespace ResourceManager
 				ImGui::PopID();
 			}
 			if (edited) PushMaterialsToGPU();
+			ImGui::Separator();
 		}
 	
 		ImGui::End();
@@ -145,8 +152,10 @@ void ResourceManager::PushMaterialsToGPU()
 void ResourceManager::Initialize(cl_context context, cl_command_queue command_queue)
 {
 	commandQueue = command_queue;
-	meshArena    = (unsigned char*)_aligned_malloc(MAX_MESH_MEMORY, 16);
+	// allocate memorys
+	triangles   = (Tri*)_aligned_malloc(MAX_MESH_MEMORY, 16);
 	iconStaging = (unsigned char*)malloc(64 * 64 * 3 + 1);
+	bvhNodes    = (BVHNode*)_aligned_malloc(MAX_BVHMEMORY, 16);
 
 	Editor::AddOnEditor(DrawMaterialsWindow);
 	// total 2mn triangle support for now we can increase it easily because we have a lot more memory in our gpu's 2m triangle has maximum 338 mb memory on gpu
@@ -213,7 +222,6 @@ TextureHandle ResourceManager::ImportTexture(const char* path)
 }
 
 void ResourceManager::PrepareMeshes() {
-	meshArenaOffset = 0;
 	Material* firstMaterial = materials + 0;
 	firstMaterial->color = 0x00FF0000u | (80 << 16) | (55);
 	firstMaterial->specularColor = 250 | (228 << 8) | (210 << 16);
@@ -234,9 +242,9 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 {
 	MeshInfo& meshInfo = meshInfos[numMeshes];
 	ObjMesh* mesh = nullptr;
-	mesh = AssetManager_ImportMesh(path, (Tri*)(meshArena + meshArenaOffset));
+	mesh = AssetManager_ImportMesh(path, triangles + numTriangles);
 	meshInfo.materialStart = mesh->numMaterials  ? numMaterials : 0;
-	meshInfo.triangleStart = meshArenaOffset / sizeof(Tri);
+	meshInfo.triangleStart = numTriangles;
 	meshInfo.numTriangles = mesh->numTris;
 	meshInfo.numMaterials = mesh->numMaterials;
 	meshObjs[numMeshes] = mesh;
@@ -259,39 +267,35 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 		materials[numMaterials++].specularTextureIndex = specularTexture ? ImportTexture(specularTexture) : 0;
 	}
 
-	meshArenaOffset += meshInfo.numTriangles * sizeof(Tri);
+	numTriangles += meshInfo.numTriangles;
 
 	AXLOG("num triangles: %d\n", meshInfo.numTriangles);
 
 	return numMeshes++;
 }
 
-extern BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices, uint* _nodesUsed);
+extern uint BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices);
 
 void ResourceManager::PushMeshesToGPU()
 {	
-	Tri* tris = (Tri*)meshArena;
-	uint numNodesUsed;
-	BVHNode* nodes = BuildBVH(tris, meshInfos, numMeshes,
-			(BVHNode*)(meshArena + (lastMeshOffset + meshArenaOffset)), bvhIndices, &numNodesUsed);
+	uint numNodesUsed = BuildBVH(triangles, meshInfos, numMeshes, bvhNodes + lastBVHIndex, bvhIndices + numberOfBVH);
+	size_t addedTriangleSize = size_t(numTriangles - lastTriangleCount) * sizeof(Tri);
 
 	// add new triangles to gpu buffer
-	clerr = clEnqueueWriteBuffer(commandQueue
-	                             , meshTriangleMem
-	                             , false, lastMeshOffset
-	                             , meshArenaOffset
-	                             , meshArena, 0, 0, 0); assert(clerr == 0);
-	// reload bvh indices (meshes)
-	clerr = clEnqueueWriteBuffer(commandQueue, bvhIndicesMem, false, 0, sizeof(uint) * MaxMeshes, bvhIndices, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, meshTriangleMem, false, lastTriangleCount * sizeof(Tri), addedTriangleSize, triangles, 0, 0, 0); assert(clerr == 0);
+		
+	size_t bvhIndexStart = numberOfBVH * sizeof(BVHNode);
+	size_t bvhIndexSize = size_t(numMeshes - numberOfBVH) * sizeof(uint);
+
+	clerr = clEnqueueWriteBuffer(commandQueue, bvhIndicesMem, false, bvhIndexStart, bvhIndexSize, bvhIndices + numberOfBVH, 0, 0, 0); assert(clerr == 0);
 	
-	clerr = clEnqueueWriteBuffer(commandQueue, bvhMem, false, lastBVHOffset, sizeof(BVHNode) * numNodesUsed, nodes, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, bvhMem, false, lastBVHIndex * sizeof(BVHNode), sizeof(BVHNode) * numNodesUsed, bvhNodes + lastBVHIndex, 0, 0, 0); assert(clerr == 0);
 
 	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, materials, 0, 0, 0); assert(clerr == 0);
 	
-	lastBVHOffset += sizeof(BVHNode) * numNodesUsed;
-	lastMeshOffset += meshArenaOffset;
-	meshArenaOffset = 0;
-	lastMeshIndex = numMeshes;
+	numberOfBVH = numMeshes;
+	lastBVHIndex += numNodesUsed;
+	lastTriangleCount += numTriangles;
 }
 
 // destroys the scene
@@ -311,6 +315,7 @@ void ResourceManager::Finalize()
 	while (numMeshes--) AssetManager_DestroyMesh(meshObjs[numMeshes]);
 	while (numTextures--) free(textureInfos[numTextures].path); // we cant delete texture icon for now, operating system will clean it anyway and it is small data either
 	free(iconStaging);
-	_aligned_free(meshArena); 
+	_aligned_free(triangles);
+	_aligned_free(bvhNodes);
 	AssetManager_Destroy();
 }

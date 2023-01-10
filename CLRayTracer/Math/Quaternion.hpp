@@ -30,18 +30,18 @@ AX_ALIGNED(16) struct Quaternion
 		static const __m128 ControlZWXY = { 1.0f, 1.0f,-1.0f,-1.0f };
 		static const __m128 ControlYXWZ = { -1.0f, 1.0f, 1.0f,-1.0f };
 		__m128 Q2X = Q2, Q2Y = Q2, Q2Z = Q2, vResult = Q2;
-		vResult = _mm_shuffle_ps(vResult, vResult, _MM_SHUFFLE(3, 3, 3, 3));
-		Q2X = _mm_shuffle_ps(Q2X, Q2X, _MM_SHUFFLE(0, 0, 0, 0));
-		Q2Y = _mm_shuffle_ps(Q2Y, Q2Y, _MM_SHUFFLE(1, 1, 1, 1));
-		Q2Z = _mm_shuffle_ps(Q2Z, Q2Z, _MM_SHUFFLE(2, 2, 2, 2));
+		vResult = _mm_shuffle_ps(vResult, vResult, _mm_shuffle(3, 3, 3, 3));
+		Q2X = _mm_shuffle_ps(Q2X, Q2X, _mm_shuffle(0, 0, 0, 0));
+		Q2Y = _mm_shuffle_ps(Q2Y, Q2Y, _mm_shuffle(1, 1, 1, 1));
+		Q2Z = _mm_shuffle_ps(Q2Z, Q2Z, _mm_shuffle(2, 2, 2, 2));
 		vResult = _mm_mul_ps(vResult, Q1);
 		__m128 Q1Shuffle = Q1;
-		Q1Shuffle = _mm_shuffle_ps(Q1Shuffle, Q1Shuffle, _MM_SHUFFLE(0, 1, 2, 3));
+		Q1Shuffle = _mm_shuffle_ps(Q1Shuffle, Q1Shuffle, _mm_shuffle(0, 1, 2, 3));
 		Q2X = _mm_mul_ps(Q2X, Q1Shuffle);
-		Q1Shuffle = _mm_shuffle_ps(Q1Shuffle, Q1Shuffle, _MM_SHUFFLE(2, 3, 0, 1));
+		Q1Shuffle = _mm_shuffle_ps(Q1Shuffle, Q1Shuffle, _mm_shuffle(2, 3, 0, 1));
 		Q2X = _mm_mul_ps(Q2X, ControlWZYX);
 		Q2Y = _mm_mul_ps(Q2Y, Q1Shuffle);
-		Q1Shuffle = _mm_shuffle_ps(Q1Shuffle, Q1Shuffle, _MM_SHUFFLE(0, 1, 2, 3));
+		Q1Shuffle = _mm_shuffle_ps(Q1Shuffle, Q1Shuffle, _mm_shuffle(0, 1, 2, 3));
 		Q2Y = _mm_mul_ps(Q2Y, ControlZWXY);
 		Q2Z = _mm_mul_ps(Q2Z, Q1Shuffle);
 		vResult = _mm_add_ps(vResult, Q2X);
@@ -64,11 +64,11 @@ AX_ALIGNED(16) struct Quaternion
 	{
 		__m128 vTemp2 = V2.vec;
 		__m128 vTemp = _mm_mul_ps(V1.vec, vTemp2);
-		vTemp2 = _mm_shuffle_ps(vTemp2, vTemp, _MM_SHUFFLE(1, 0, 0, 0)); // Copy X to the Z position and Y to the W position
+		vTemp2 = _mm_shuffle_ps(vTemp2, vTemp, _mm_shuffle(1, 0, 0, 0)); // Copy X to the Z position and Y to the W position
 		vTemp2 = _mm_add_ps(vTemp2, vTemp);          // Add Z = X+Z; W = Y+W;
-		vTemp = _mm_shuffle_ps(vTemp, vTemp2, _MM_SHUFFLE(0, 3, 0, 0));  // Copy W to the Z position
+		vTemp = _mm_shuffle_ps(vTemp, vTemp2, _mm_shuffle(0, 3, 0, 0));  // Copy W to the Z position
 		vTemp = _mm_add_ps(vTemp, vTemp2);           // Add Z and W together
-		return _mm_shuffle_ps(vTemp, vTemp, _MM_SHUFFLE(2, 2, 2, 2));    // Splat Z and return
+		return _mm_shuffle_ps(vTemp, vTemp, _mm_shuffle(2, 2, 2, 2));    // Splat Z and return
 	}
 
 	inline Quaternion VECTORCALL Slerp(const Quaternion Q0, const Quaternion Q1, float t) noexcept
@@ -94,7 +94,7 @@ AX_ALIGNED(16) struct Quaternion
 
 		__m128 Omega = _mm_atan2_ps(SinOmega, CosOmega);
 
-		__m128 V01 = _mm_permute_ps(T, _MM_SHUFFLE(2, 3, 0, 1));
+		__m128 V01 = _mm_permute_ps(T, _mm_shuffle(2, 3, 0, 1));
 		V01 = _mm_and_ps(V01, g_XMMaskXY);
 		V01 = _mm_xor_ps(V01, SignMask2);
 		V01 = _mm_add_ps(g_XMIdentityR0, V01);
@@ -110,7 +110,7 @@ AX_ALIGNED(16) struct Quaternion
 
 		S1 = _mm_mul_ps(S1, Sign);
 		__m128 Result = _mm_mul_ps(Q0.vec, S0);
-		S1 = _mm_mul_ps(S1, Q1.vec);
+		S1 = _mm_mul_ps(S1, Q1.vec); // _mm_fmadd_ps(S1, Q1.vec, Result) ?
 		return _mm_add_ps(Result, S1);
 	}
 

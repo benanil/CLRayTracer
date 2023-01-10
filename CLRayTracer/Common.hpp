@@ -145,3 +145,4 @@ namespace Compare
 	/*for qsort*/ template<typename T>
 	inline int QGreater(const void* a, const void* b) { return *(T*)a > *(T*)b; }
 }
+

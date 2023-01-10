@@ -4,12 +4,10 @@
 #include "Math/Transform.hpp"
 #include "Window.hpp"
 #include "AssetManager.hpp"
+#include "CPURayTrace.hpp"
+#include <stdio.h>
 
 // things that I want to edit in editor
-// edit materials DONE
-// edit sun angle
-// edit mesh instance positions
-// spawn new mesh
 // recompile kernel
 
 static void(*EndFrameEvents[20])(void);
@@ -52,7 +50,7 @@ static void DisplayProfilerStats()
 }
 #endif
 
-static MeshHandle bmwMesh, nanosuitMesh;
+static MeshHandle bmwMesh, nanosuitMesh, boxMesh;
 static Transform bmwTransform = {};
 
 void Engine_Start()
@@ -65,11 +63,9 @@ void Engine_Start()
 	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 	bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
 	nanosuitMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
+	boxMesh = ResourceManager::ImportMesh("Assets/sphere.obj");
 	
 	bmwTransform.SetPosition(0.0f, 1.20f, 0.0f);
-
-	bmwTransform.SetMatrix(bmwTransform.GetMatrix());
-	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 
 	ResourceManager::PushMeshesToGPU();
 	ResourceManager::PushTexturesToGPU();
@@ -78,8 +74,9 @@ void Engine_Start()
 
 	Renderer::RegisterMeshInstance(bmwMesh, ResourceManager::DefaultMaterial, bmwTransform.GetMatrix());
 	Renderer::RegisterMeshInstance(nanosuitMesh, ResourceManager::DefaultMaterial, Matrix4::Identity());
+	Renderer::RegisterMeshInstance(boxMesh, ResourceManager::NoneMaterial, Matrix4::Identity());
 
-	Renderer::EndInstanceRegister();
+	Renderer::EndInstanceRegister();	
 }
 
 float Engine_Tick()
@@ -87,30 +84,46 @@ float Engine_Tick()
 	float dt = (float)Window::DeltaTime();
 	static float rotation = 0.0f;
 	bool positionChanged = false;
-
+	
 	bool pressing = Window::GetMouseButton(MouseButton_Right);
-
+	
 	float speed = (dt * 5.0f) + (Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
 	Vector3f dir{};
-
+	
 	if (!pressing && Window::GetKey(KeyCode_W)) dir -= bmwTransform.GetRight(), positionChanged |= 1;
 	if (!pressing && Window::GetKey(KeyCode_S)) dir += bmwTransform.GetRight(), positionChanged |= 1;
 	if (!pressing && Window::GetKey(KeyCode_A)) dir += bmwTransform.GetForward(), positionChanged |= 1;
 	if (!pressing && Window::GetKey(KeyCode_D)) dir -= bmwTransform.GetForward(), positionChanged |= 1;
 	if (!pressing && Window::GetKey(KeyCode_Q)) dir -= bmwTransform.GetUp(), positionChanged |= 1;
 	if (!pressing && Window::GetKey(KeyCode_E)) dir += bmwTransform.GetUp(), positionChanged |= 1;
-
+	
 	bmwTransform.SetRotationEuler(Vector3f(0, rotation, 0));
 	rotation += dt * 0.25f;
-
+	
 	if (positionChanged && dir.LengthSquared() > 0.1f)
 	{
 		dir = dir.Normalized();
 		bmwTransform.position += dir * speed;
 		// bmwTransform.UpdatePosition();
 	}
-	bmwTransform.SetMatrix(bmwTransform.GetMatrix());
 	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
+
+	if (Window::GetMouseButton(MouseButton_Left))
+	{
+		const Camera& camera = Renderer::GetCamera();
+		Vector2f mousePos = Window::GetMouseWindowPos();
+		Ray ray = camera.ScreenPointToRay(mousePos);
+		
+		HitRecord record = CPU_RayCast(ray);
+		
+		if (record.distance != RayacastMissDistance)
+		{
+			// printf("record distance: %f, index: %d\n", record.distance, record.index);
+			printf("record normal: %f, %f, %f\n", record.normal.x, record.normal.y, record.normal.z);
+			Renderer::SetMeshPosition(boxMesh, ray.origin + (ray.direction * record.distance));
+		}
+	}
+
 	return SunAngle;
 }
 

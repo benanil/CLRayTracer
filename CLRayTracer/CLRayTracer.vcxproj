@@ -159,6 +159,7 @@
     <ClCompile Include="..\imgui\imgui_widgets.cpp" />
     <ClCompile Include="AssetManager.cpp" />
     <ClCompile Include="BVH.cpp" />
+    <ClCompile Include="CPURayTrace.cpp" />
     <ClCompile Include="Editor\ResourceWindow.cpp" />
     <ClCompile Include="Engine.cpp" />
     <ClCompile Include="EngineMain.cpp" />
@@ -177,6 +178,7 @@
     <ClInclude Include="Array.hpp" />
     <ClInclude Include="AssetManager.hpp" />
     <ClInclude Include="Bitset.hpp" />
+    <ClInclude Include="CPURayTrace.hpp" />
     <ClInclude Include="Editor\Editor.hpp" />
     <ClInclude Include="Editor\FontAwesome.hpp" />
     <ClInclude Include="Engine.hpp" />

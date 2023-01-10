@@ -49,22 +49,22 @@ Matrix4 MatMatMul(Matrix4 a, Matrix4 b) {
 
 Matrix3 Mat3Mat3Mul(Matrix3 a, Matrix3 b) {
 	Matrix3 result;
-	float3 vx = a.x.xxxx * b.x;
-	float3 vy = a.x.yyyy * b.y;
-	float3 vz = a.x.zzzz * b.z;
+	float3 vx = a.x.xxx * b.x;
+	float3 vy = a.x.yyy * b.y;
+	float3 vz = a.x.zzz * b.z;
 
 	vx += vz; vx += vy;
 	result.x = vx;
 
-	vx = a.y.xxxx * b.x;
-	vy = a.y.yyyy * b.y;
-	vz = a.y.zzzz * b.z;
+	vx = a.y.xxx * b.x;
+	vy = a.y.yyy * b.y;
+	vz = a.y.zzz * b.z;
 	vx += vz; vx += vy;
 	result.y = vx;
 
-	vx = a.z.xxxx * b.x;
-	vy = a.z.yyyy * b.y;
-	vz = a.z.zzzz * b.z;
+	vx = a.z.xxx * b.x;
+	vy = a.z.yyy * b.y;
+	vz = a.z.zzz * b.z;
 	vx += vz; vx += vy;
 	result.z = vx;
 	return result;
@@ -86,14 +86,14 @@ Matrix4 Transpose(Matrix4 M)
 
 Matrix3 TransposeToMatrix3(Matrix4 M)
 {
-	float4 vTemp1 = shuffle2(M.x, M.y, (uint4)(0, 1, 4, 5));
-	float4 vTemp3 = shuffle2(M.x, M.y, (uint4)(2, 3, 6, 7));
-	float4 vTemp2 = shuffle2(M.z, M.w, (uint4)(0, 1, 4, 5));
-	float4 vTemp4 = shuffle2(M.z, M.w, (uint4)(2, 3, 6, 7));
+	// float4 vTemp1 = shuffle2(M.x, M.y, (uint4)(0, 1, 4, 5));
+	// float4 vTemp3 = shuffle2(M.x, M.y, (uint4)(2, 3, 6, 7));
+	// float4 vTemp2 = shuffle2(M.z, M.w, (uint4)(0, 1, 4, 5));
+	// float4 vTemp4 = shuffle2(M.z, M.w, (uint4)(2, 3, 6, 7));
 	Matrix3 mResult;
-	mResult.x = shuffle2(vTemp1, vTemp2, (uint4)(0, 2, 4, 6)).xyz;
-	mResult.y = shuffle2(vTemp1, vTemp2, (uint4)(1, 3, 5, 7)).xyz;
-	mResult.z = shuffle2(vTemp3, vTemp4, (uint4)(0, 2, 4, 6)).xyz;
+	mResult.x = M.x.xyz;// shuffle2(vTemp1, vTemp2, (uint4)(0, 2, 4, 6)).xyz;
+	mResult.y = M.y.xyz;// shuffle2(vTemp1, vTemp2, (uint4)(1, 3, 5, 7)).xyz;
+	mResult.z = M.z.xyz;// shuffle2(vTemp3, vTemp4, (uint4)(0, 2, 4, 6)).xyz;
 	return mResult;
 }
 
@@ -119,7 +119,15 @@ float3 reflect(float3 v, float3 n) {
 }
 
 float3 ACESFilm(float3 x) {
-	return (x * (2.51f * x + 0.03f)) / (x * (2.43f * x + 0.59f) + 0.14f);
+	// Aces here
+	// constant float a = 2.51f; const float b = 0.03f;
+	// constant float c = 2.43f; const float d = 0.59f;
+	// constant float e = 0.14f;
+	// x = clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0f, 1.0f);
+	x = x / (1.0f + x); // reinard 
+	float gamma = 1.55f;
+	x = pow(x, (float3)(1.0f / gamma));
+	return x;
 }
 
 float3 Saturation(float3 in, float change)

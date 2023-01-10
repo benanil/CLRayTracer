@@ -91,8 +91,6 @@ namespace ResourceManager
 	constexpr MaterialHandle NoneMaterial = 0;
 	constexpr MaterialHandle DefaultMaterial = 0xFFFF;
 
-	void PrepareTextures();
-
 	void GetGPUMemories(
 		cl_mem* textureHandleMem,
 		cl_mem* textureDataMem  ,
@@ -119,6 +117,11 @@ namespace ResourceManager
 	void Finalize();
 
 	void PushTexturesToGPU();
-	void* GetAreaPointer(); // unsafe
+	
+	BVHNode* GetBVHNodes();
+	uint* GetBVHIndices();
+	Material* GetMaterials();
+	Tri* GetTriangles();
+	Texture* GetTextures();
 }
 

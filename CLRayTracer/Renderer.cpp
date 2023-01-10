@@ -13,10 +13,10 @@
 #include "Random.hpp"
 #include "Engine.hpp"
 #include <stdio.h>
+#include "CPURayTrace.hpp"
 
 // todo: 
-//      dynamicly add meshes, spheres, textures, materials, skybox
-//      update gpu buffers
+//      textures, materials, skybox
 //      run renderer on seperate thread
 //      run gameplay, physics etc. code in main thread
 //      specular, reflections
@@ -36,8 +36,6 @@ namespace
 	Sphere spheres[Renderer::MaxNumSpheres];
 	MeshInstance meshInstances[Renderer::MaxNumInstances];
 
-	uint numMeshInstances = 0u;
-
 	GLuint VAO;
 	GLuint shaderProgram;
 	GLuint screenTexture;
@@ -45,6 +43,11 @@ namespace
 	
 	cl_uint NumGPUCores;
 }
+
+const Camera& Renderer::GetCamera() { return camera; }
+
+// extern for cpu ray trace
+uint numMeshInstances = 0u;
 
 typedef void (*GLFWglproc)(void);
 extern "C" GLFWglproc glfwGetProcAddress(const char* procname); 
@@ -186,6 +189,7 @@ int Renderer::Initialize()
 	
 	InitializeOpenGL();
 	InitializeOpenCL();
+	CPU_RayTraceInitialize(meshInstances);
 
 	// initialize buffers
 	instanceMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(MeshInstance) * MaxNumInstances, nullptr, &clerr); assert(clerr == 0);
@@ -231,7 +235,7 @@ void Renderer::BeginInstanceRegister() {
 MeshInstanceHandle Renderer::RegisterMeshInstance(
 	MeshHandle handle, MaterialHandle materialHandle, float3 position, const Quaternion& rotation, const float3& scale)
 {
-	Matrix4 matrix = Matrix4::Identity() * Matrix4::FromQuaternion(rotation) * Matrix4::CreateScale(scale) * Matrix4::FromPosition(position);
+	Matrix4 matrix = Matrix4::PositionRotationScale(position, rotation, scale);
 	return RegisterMeshInstance(handle, materialHandle, position, rotation, scale);
 }
 

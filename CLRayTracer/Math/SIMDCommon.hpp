@@ -75,17 +75,21 @@ FINLINE __m256i VECTORCALL SSESelect(const __m256i V1, const __m256i V2, const _
 	return _mm256_or_epi32(vTemp1, vTemp2);
 }
 
-FINLINE __m128 VECTORCALL SSESplatX(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(0, 0, 0, 0)); }
-FINLINE __m128 VECTORCALL SSESplatY(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(1, 1, 1, 1)); }
-FINLINE __m128 VECTORCALL SSESplatZ(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(2, 2, 2, 2)); }
-FINLINE __m128 VECTORCALL SSESplatW(const __m128 V1) { return _mm_permute_ps(V1, _MM_SHUFFLE(3, 3, 3, 3)); }
+inline constexpr int _mm_shuffle(int fp3, int fp2, int fp1, int fp0)
+{
+	return (((fp3) << 6) | ((fp2) << 4) | ((fp1) << 2) | ((fp0)));
+}
 
+FINLINE __m128 VECTORCALL SSESplatX(const __m128 V1) { return _mm_permute_ps(V1, _mm_shuffle(0, 0, 0, 0)); }
+FINLINE __m128 VECTORCALL SSESplatY(const __m128 V1) { return _mm_permute_ps(V1, _mm_shuffle(1, 1, 1, 1)); }
+FINLINE __m128 VECTORCALL SSESplatZ(const __m128 V1) { return _mm_permute_ps(V1, _mm_shuffle(2, 2, 2, 2)); }
+FINLINE __m128 VECTORCALL SSESplatW(const __m128 V1) { return _mm_permute_ps(V1, _mm_shuffle(3, 3, 3, 3)); }
 
 FINLINE void VECTORCALL SSEStoreVector3(float* f, __m128 vec)
 {
 	_mm_store_ss(f + 0, vec);
-	_mm_store_ss(f + 1, _mm_permute_ps(vec, _MM_SHUFFLE(1,1,1,1)));
-	_mm_store_ss(f + 2, _mm_permute_ps(vec, _MM_SHUFFLE(2,2,2,2)));
+	_mm_store_ss(f + 1, _mm_permute_ps(vec, _mm_shuffle(1,1,1,1)));
+	_mm_store_ss(f + 2, _mm_permute_ps(vec, _mm_shuffle(2,2,2,2)));
 }
 
 FINLINE float VECTORCALL SSEVectorGetX(__m128 V) {
@@ -93,15 +97,15 @@ FINLINE float VECTORCALL SSEVectorGetX(__m128 V) {
 }
 
 FINLINE float VECTORCALL SSEVectorGetY(__m128 V) {
-	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _MM_SHUFFLE(1, 1, 1, 1)));
+	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _mm_shuffle(1, 1, 1, 1)));
 }
 
 FINLINE float VECTORCALL SSEVectorGetZ(__m128 V) {
-	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _MM_SHUFFLE(2, 2, 2, 2)));
+	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _mm_shuffle(2, 2, 2, 2)));
 }
 
 FINLINE float VECTORCALL SSEVectorGetW(__m128 V) {
-	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _MM_SHUFFLE(3, 3, 3, 3)));
+	return _mm_cvtss_f32(_mm_shuffle_ps(V, V, _mm_shuffle(3, 3, 3, 3)));
 }
 
 FINLINE __m128 VECTORCALL SSEVectorLength(const __m128 V)
@@ -116,11 +120,11 @@ FINLINE __m128 VECTORCALL SSEVectorNormalize(const __m128 V)
 
 FINLINE __m128 VECTORCALL SSEVector3Cross(const __m128 V1, const __m128  V2)
 {
-	__m128 vTemp1 = _mm_permute_ps(V1, _MM_SHUFFLE(3, 0, 2, 1));
-	__m128 vTemp2 = _mm_permute_ps(V2, _MM_SHUFFLE(3, 1, 0, 2));
+	__m128 vTemp1 = _mm_permute_ps(V1, _mm_shuffle(3, 0, 2, 1));
+	__m128 vTemp2 = _mm_permute_ps(V2, _mm_shuffle(3, 1, 0, 2));
 	__m128 vResult = _mm_mul_ps(vTemp1, vTemp2);
-	vTemp1 = _mm_permute_ps(vTemp1, _MM_SHUFFLE(3, 0, 2, 1));
-	vTemp2 = _mm_permute_ps(vTemp2, _MM_SHUFFLE(3, 1, 0, 2));
+	vTemp1 = _mm_permute_ps(vTemp1, _mm_shuffle(3, 0, 2, 1));
+	vTemp2 = _mm_permute_ps(vTemp2, _mm_shuffle(3, 1, 0, 2));
 	vResult = _mm_fnmadd_ps(vTemp1, vTemp2, vResult);
 	// Set w to zero
 	return _mm_and_ps(vResult, g_XMMask3);
@@ -129,12 +133,12 @@ FINLINE __m128 VECTORCALL SSEVector3Cross(const __m128 V1, const __m128  V2)
 FINLINE __m128 VECTORCALL SSEVector3Dot(const __m128 V1, const __m128 V2)
 {
 	__m128 vDot = _mm_mul_ps(V1, V2);
-	__m128 vTemp = _mm_permute_ps(vDot, _MM_SHUFFLE(2, 1, 2, 1));
+	__m128 vTemp = _mm_permute_ps(vDot, _mm_shuffle(2, 1, 2, 1));
 	vDot = _mm_add_ss(vDot, vTemp);
-	vTemp = _mm_permute_ps(vTemp, _MM_SHUFFLE(1, 1, 1, 1));
+	vTemp = _mm_permute_ps(vTemp, _mm_shuffle(1, 1, 1, 1));
 	vDot = _mm_add_ss(vDot, vTemp);
 	// Splat x
-	return _mm_permute_ps(vDot, _MM_SHUFFLE(0, 0, 0, 0));
+	return _mm_permute_ps(vDot, _mm_shuffle(0, 0, 0, 0));
 }
 
 // https://stackoverflow.com/questions/17863411/sse-multiplication-of-2-64-bit-integers
@@ -164,7 +168,7 @@ FINLINE int VECTORCALL hsum_128_epi32avx(__m128i x)
 {
 	__m128i hi64 = _mm_unpackhi_epi64(x, x); // 3-operand non-destructive AVX lets us save a byte without needing a movdqa
 	__m128i sum64 = _mm_add_epi32(hi64, x);
-	__m128i hi32 = _mm_shuffle_epi32(sum64, _MM_SHUFFLE(2, 3, 0, 1));    // Swap the low two elements
+	__m128i hi32 = _mm_shuffle_epi32(sum64, _mm_shuffle(2, 3, 0, 1));    // Swap the low two elements
 	__m128i sum32 = _mm_add_epi32(sum64, hi32);
 	return _mm_cvtsi128_si32(sum32);       // movd
 }
@@ -173,7 +177,7 @@ FINLINE double VECTORCALL hsum_128_pdavx(__m128d x)
 {
 	__m128d hi64 = _mm_unpackhi_pd(x, x); // 3-operand non-destructive AVX lets us save a byte without needing a movdqa
 	__m128d sum64 = _mm_add_pd(hi64, x);
-	__m128d hi32 = _mm_shuffle_pd(sum64, sum64, _MM_SHUFFLE(2, 3, 0, 1));    // Swap the low two elements
+	__m128d hi32 = _mm_shuffle_pd(sum64, sum64, _mm_shuffle(2, 3, 0, 1));    // Swap the low two elements
 	__m128d sum32 = _mm_add_pd(sum64, hi32);
 	return _mm_cvtsd_f64(sum32);       // movd
 }

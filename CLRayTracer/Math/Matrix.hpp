@@ -17,17 +17,21 @@ struct Matrix3
 		m[2][2] = 1.0f;
 	}
 
+	const Vector3f& GetForward() const { return vec[2]; }
+	const Vector3f& GetUp()      const { return vec[1]; }
+	const Vector3f& GetRight()   const { return vec[0]; }
+
 	inline static Matrix3 LookAt(Vector3f direction, Vector3f up)
 	{
 		Matrix3 result{};
 		result.vec[2] = direction;
 		Vector3f const& Right = Vector3f::Cross(up, result.vec[2]);
-		result.vec[0] = Right * rsqrt(Max(0.00001f, Vector3f::Dot(Right, Right)));
+		result.vec[0] = Right * RSqrt(Max(0.00001f, Vector3f::Dot(Right, Right)));
 		result.vec[1] = Vector3f::Cross(result.vec[2], result.vec[0]);
 		return result;
 	}
 
-	inline Matrix3 static Multiply(const Matrix3& a, const Matrix3& b)
+	inline static Matrix3 Multiply(const Matrix3& a, const Matrix3& b)
 	{
 		Matrix3 result;
 		float3 vx = a.x.xxx() * b.x;
@@ -51,11 +55,11 @@ struct Matrix3
 		return result;
 	}
 
-	float3 Mat3Mul(Matrix3 m, float3 v) {
+	inline static float3 Multiply(const Matrix3& m, const float3& v) {
 		return m.x * v.xxx() + m.y * v.yyy() + m.z * v.zzz();
 	}
 
-	static Matrix3 FromQuaternion(Quaternion q)
+	inline static Matrix3 FromQuaternion(Quaternion q)
 	{
 		// ai generated
 		Matrix3 rot;
@@ -148,10 +152,10 @@ AX_ALIGNED(16) struct Matrix4
 	__m128& operator [] (int index) { return r[index]; }
 	
 	Vector4 VECTORCALL  operator *  (const Vector3f v)  noexcept { return Vector3Transform(v, *this); };
-	Vector4 VECTORCALL  operator *  (const Vector4 v)   noexcept { return Vector4Transform(v, *this); };
+	Vector4 VECTORCALL  operator *  (const Vector4& v)   noexcept { return Vector4Transform(v, *this); };
 
-	Matrix4 VECTORCALL  operator *  (const Matrix4 M)  noexcept { return Matrix4::Multiply(*this, M); };
-	Matrix4& VECTORCALL operator *= (const Matrix4 M)  noexcept { *this = Matrix4::Multiply(*this, M); return *this; };
+	Matrix4 VECTORCALL  operator *  (const Matrix4& M)  noexcept { return Matrix4::Multiply(*this, M); };
+	Matrix4& VECTORCALL operator *= (const Matrix4& M)  noexcept { *this = Matrix4::Multiply(*this, M); return *this; };
 
 	FINLINE static Matrix4 Identity()
 	{
@@ -193,7 +197,7 @@ AX_ALIGNED(16) struct Matrix4
 		return CreateScale(vec3.x, vec3.y, vec3.z);
 	}
 
-	// please assign normalized vectors
+	// please assign normalized vectors, returns view matrix
 	FINLINE static Matrix4 VECTORCALL LookAtRH(Vector3f eye, Vector3f center, const Vector3f& up)
 	{
 		Vector4 NegEyePosition;
@@ -220,7 +224,7 @@ AX_ALIGNED(16) struct Matrix4
 		return Matrix4::Transpose(M);
 	}
 
-	FINLINE static Matrix4 VECTORCALL PerspectiveFovRH(float fov, float width, float height, float zNear, float zFar)
+	FINLINE static Matrix4 PerspectiveFovRH(float fov, float width, float height, float zNear, float zFar)
 	{
 		const float rad = fov;
 		const float h = cosf(0.5f * rad) / sinf(0.5f * rad);
@@ -232,20 +236,6 @@ AX_ALIGNED(16) struct Matrix4
 		M.m[2][3] = -1.0f;
 		M.m[3][2] = -(2.0f * zFar * zNear) / (zFar - zNear);
 		return M;
-	}
-
-	FINLINE static Matrix4 VECTORCALL Transpose(const Matrix4 M)
-	{
-		const __m128 vTemp1 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(1, 0, 1, 0));
-		const __m128 vTemp3 = _mm_shuffle_ps(M.r[0], M.r[1], _MM_SHUFFLE(3, 2, 3, 2));
-		const __m128 vTemp2 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(1, 0, 1, 0));
-		const __m128 vTemp4 = _mm_shuffle_ps(M.r[2], M.r[3], _MM_SHUFFLE(3, 2, 3, 2));
-		Matrix4 mResult;
-		mResult.r[0] = _mm_shuffle_ps(vTemp1, vTemp2, _MM_SHUFFLE(2, 0, 2, 0));
-		mResult.r[1] = _mm_shuffle_ps(vTemp1, vTemp2, _MM_SHUFFLE(3, 1, 3, 1));
-		mResult.r[2] = _mm_shuffle_ps(vTemp3, vTemp4, _MM_SHUFFLE(2, 0, 2, 0));
-		mResult.r[3] = _mm_shuffle_ps(vTemp3, vTemp4, _MM_SHUFFLE(3, 1, 3, 1));
-		return mResult;
 	}
 
 	// https://lxjk.github.io/2017/09/03/Fast-4x4-Matrix-Inverse-with-SSE-SIMD-Explained.html
@@ -325,15 +315,11 @@ AX_ALIGNED(16) struct Matrix4
 
 	inline Matrix4 static VECTORCALL Inverse(const Matrix4 inM) noexcept
 	{
-		// use block matrix method
-	    // A is a matrix, then i(A) or iA means inverse of A, A# (or A_ in code) means adjugate of A, |A| (or detA in code) is determinant, tr(A) is trace
-	    // sub matrices
 		__m128 A = VecShuffle_0101(inM.r[0], inM.r[1]);
 		__m128 B = VecShuffle_2323(inM.r[0], inM.r[1]);
 		__m128 C = VecShuffle_0101(inM.r[2], inM.r[3]);
 		__m128 D = VecShuffle_2323(inM.r[2], inM.r[3]);
 
-		// determinant as (|A| |B| |C| |D|)
 		__m128 detSub = _mm_sub_ps(
 			_mm_mul_ps(VecShuffle(inM.r[0], inM.r[2], 0, 2, 0, 2), VecShuffle(inM.r[1], inM.r[3], 1, 3, 1, 3)),
 			_mm_mul_ps(VecShuffle(inM.r[0], inM.r[2], 1, 3, 1, 3), VecShuffle(inM.r[1], inM.r[3], 0, 2, 0, 2))
@@ -343,37 +329,24 @@ AX_ALIGNED(16) struct Matrix4
 		__m128 detC = VecSwizzle1(detSub, 2);
 		__m128 detD = VecSwizzle1(detSub, 3);
 
-		// let iM = 1/|M| * | X  Y |
-		//                  | Z  W |
-		// D#C
 		__m128 D_C = Mat2AdjMul(D, C);
-		// A#B
 		__m128 A_B = Mat2AdjMul(A, B);
-		// X# = |D|A - B(D#C)
 		__m128 X_ = _mm_sub_ps(_mm_mul_ps(detD, A), Mat2Mul(B, D_C));
-		// W# = |A|D - C(A#B)
 		__m128 W_ = _mm_sub_ps(_mm_mul_ps(detA, D), Mat2Mul(C, A_B));
 
-		// |M| = |A|*|D| + ... (continue later)
 		__m128 detM = _mm_mul_ps(detA, detD);
 
-		// Y# = |B|C - D(A#B)#
 		__m128 Y_ = _mm_sub_ps(_mm_mul_ps(detB, C), Mat2MulAdj(D, A_B));
-		// Z# = |C|B - A(D#C)#
 		__m128 Z_ = _mm_sub_ps(_mm_mul_ps(detC, B), Mat2MulAdj(A, D_C));
 
-		// |M| = |A|*|D| + |B|*|C| ... (continue later)
 		detM = _mm_add_ps(detM, _mm_mul_ps(detB, detC));
 
-		// tr((A#B)(D#C))
 		__m128 tr = _mm_mul_ps(A_B, VecSwizzle(D_C, 0, 2, 1, 3));
 		tr = _mm_hadd_ps(tr, tr);
 		tr = _mm_hadd_ps(tr, tr);
-		// |M| = |A|*|D| + |B|*|C| - tr((A#B)(D#C)
 		detM = _mm_sub_ps(detM, tr);
 
 		const __m128 adjSignMask = _mm_setr_ps(1.f, -1.f, -1.f, 1.f);
-		// (1/|M|, -1/|M|, -1/|M|, 1/|M|)
 		__m128 rDetM = _mm_div_ps(adjSignMask, detM);
 
 		X_ = _mm_mul_ps(X_, rDetM);
@@ -382,7 +355,6 @@ AX_ALIGNED(16) struct Matrix4
 		W_ = _mm_mul_ps(W_, rDetM);
 
 		Matrix4 out;
-		// apply adjugate and store, here we combine adjugate shuffle and store shuffle
 		out.r[0] = VecShuffle(X_, Y_, 3, 1, 3, 1);
 		out.r[1] = VecShuffle(X_, Y_, 2, 0, 2, 0);
 		out.r[2] = VecShuffle(Z_, W_, 3, 1, 3, 1);
@@ -390,13 +362,13 @@ AX_ALIGNED(16) struct Matrix4
 		return out;
 	}
 
-	inline Matrix4 static VECTORCALL Multiply(const Matrix4 in1, const Matrix4 in2)
+	inline Matrix4 static VECTORCALL Multiply(const Matrix4 in1, const Matrix4& in2)
 	{
 		Matrix4 out;
-		__m128 e0 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(0, 0, 0, 0));
-		__m128 e1 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(1, 1, 1, 1));
-		__m128 e2 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(2, 2, 2, 2));
-		__m128 e3 = _mm_shuffle_ps(in2[0], in2[0], _MM_SHUFFLE(3, 3, 3, 3));
+		__m128 e0 = _mm_shuffle_ps(in2[0], in2[0], _mm_shuffle(0, 0, 0, 0));
+		__m128 e1 = _mm_shuffle_ps(in2[0], in2[0], _mm_shuffle(1, 1, 1, 1));
+		__m128 e2 = _mm_shuffle_ps(in2[0], in2[0], _mm_shuffle(2, 2, 2, 2));
+		__m128 e3 = _mm_shuffle_ps(in2[0], in2[0], _mm_shuffle(3, 3, 3, 3));
 		__m128 m0 = _mm_mul_ps(in1[0], e0);
 		__m128 m1 = _mm_mul_ps(in1[1], e1);
 		__m128 m2 = _mm_mul_ps(in1[2], e2);
@@ -406,10 +378,10 @@ AX_ALIGNED(16) struct Matrix4
 		__m128 a2 = _mm_add_ps(a0, a1);
 		out[0] = a2;
 		
-		e0 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(0, 0, 0, 0));
-		e1 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(1, 1, 1, 1));
-		e2 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(2, 2, 2, 2));
-		e3 = _mm_shuffle_ps(in2[1], in2[1], _MM_SHUFFLE(3, 3, 3, 3));
+		e0 = _mm_shuffle_ps(in2[1], in2[1], _mm_shuffle(0, 0, 0, 0));
+		e1 = _mm_shuffle_ps(in2[1], in2[1], _mm_shuffle(1, 1, 1, 1));
+		e2 = _mm_shuffle_ps(in2[1], in2[1], _mm_shuffle(2, 2, 2, 2));
+		e3 = _mm_shuffle_ps(in2[1], in2[1], _mm_shuffle(3, 3, 3, 3));
 		m0 = _mm_mul_ps(in1[0], e0);
 		m1 = _mm_mul_ps(in1[1], e1);
 		m2 = _mm_mul_ps(in1[2], e2);
@@ -419,10 +391,10 @@ AX_ALIGNED(16) struct Matrix4
 		a2 = _mm_add_ps(a0, a1);
 		out[1] = a2;
 		
-		e0 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(0, 0, 0, 0));
-		e1 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(1, 1, 1, 1));
-		e2 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(2, 2, 2, 2));
-		e3 = _mm_shuffle_ps(in2[2], in2[2], _MM_SHUFFLE(3, 3, 3, 3));
+		e0 = _mm_shuffle_ps(in2[2], in2[2], _mm_shuffle(0, 0, 0, 0));
+		e1 = _mm_shuffle_ps(in2[2], in2[2], _mm_shuffle(1, 1, 1, 1));
+		e2 = _mm_shuffle_ps(in2[2], in2[2], _mm_shuffle(2, 2, 2, 2));
+		e3 = _mm_shuffle_ps(in2[2], in2[2], _mm_shuffle(3, 3, 3, 3));
 		m0 = _mm_mul_ps(in1[0], e0);
 		m1 = _mm_mul_ps(in1[1], e1);
 		m2 = _mm_mul_ps(in1[2], e2);
@@ -432,10 +404,10 @@ AX_ALIGNED(16) struct Matrix4
 		a2 = _mm_add_ps(a0, a1);
 		out[2] = a2;
 		
-		e0 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(0, 0, 0, 0));
-		e1 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(1, 1, 1, 1));
-		e2 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(2, 2, 2, 2));
-		e3 = _mm_shuffle_ps(in2[3], in2[3], _MM_SHUFFLE(3, 3, 3, 3));
+		e0 = _mm_shuffle_ps(in2[3], in2[3], _mm_shuffle(0, 0, 0, 0));
+		e1 = _mm_shuffle_ps(in2[3], in2[3], _mm_shuffle(1, 1, 1, 1));
+		e2 = _mm_shuffle_ps(in2[3], in2[3], _mm_shuffle(2, 2, 2, 2));
+		e3 = _mm_shuffle_ps(in2[3], in2[3], _mm_shuffle(3, 3, 3, 3));
 		m0 = _mm_mul_ps(in1[0], e0);
 		m1 = _mm_mul_ps(in1[1], e1);
 		m2 = _mm_mul_ps(in1[2], e2);
@@ -445,6 +417,15 @@ AX_ALIGNED(16) struct Matrix4
 		a2 = _mm_add_ps(a0, a1);
 		out[3] = a2;
 		return out;
+	}
+
+	FINLINE static Matrix4 PositionRotationScale(const Vector3f& position, const Quaternion& rotation, const Vector3f& scale)
+	{
+		Matrix4 result{};
+		result *= FromPosition(position);
+		result *= FromQuaternion(rotation);
+		result *= CreateScale(position);
+		return result;
 	}
 
 	FINLINE static Vector3f VECTORCALL ExtractPosition(const Matrix4 matrix) noexcept
@@ -457,6 +438,90 @@ AX_ALIGNED(16) struct Matrix4
 	FINLINE static Vector3f VECTORCALL ExtractScale(const Matrix4 matrix) noexcept
 	{
 		return Vector3f(SSEVectorLengthf(matrix.r[0]), SSEVectorLengthf(matrix.r[2]), SSEVectorLengthf(matrix.r[1]));
+	}
+
+	FINLINE static Matrix4 RotationX(float angleRadians) {
+		Matrix4  out_matrix{};
+		float c = cosf(angleRadians);
+		float s = sinf(angleRadians);
+
+		out_matrix.m[1][1] = c;
+		out_matrix.m[1][2] = s;
+		out_matrix.m[2][1] = -s;
+		out_matrix.m[2][2] = c;
+		return out_matrix;
+	}
+
+	FINLINE static Matrix4 RotationY(float angleRadians) {
+		Matrix4 out_matrix{};
+		float c = cosf(angleRadians);
+		float s = sinf(angleRadians);
+
+		out_matrix.m[0][0] = c;
+		out_matrix.m[0][2] = -s;
+		out_matrix.m[2][0] = s;
+		out_matrix.m[2][2] = c;
+		return out_matrix;
+	}
+	
+	FINLINE static Matrix4 RotationZ(float angleRadians) {
+		Matrix4 out_matrix{};
+		float c = cosf(angleRadians);
+		float s = sinf(angleRadians);
+
+		out_matrix.m[0][0] = c;
+		out_matrix.m[0][1] = s;
+		out_matrix.m[1][0] = -s;
+		out_matrix.m[1][1] = c;
+		return out_matrix;
+	}
+
+	FINLINE static Matrix4 RotationFromEuler(Vector3f eulerRadians) {
+		return RotationX(eulerRadians.x) * RotationY(eulerRadians.y) * RotationZ(eulerRadians.z);
+	}
+
+	FINLINE Matrix4 static VECTORCALL LookAt(Vector3f eyePosition, Vector3f focusPosition, Vector3f upDirection) noexcept
+	{
+		__m128 EyePosition = _mm_loadu_ps(&eyePosition.x);
+		__m128 FocusPosition = _mm_loadu_ps(&focusPosition.x);
+		__m128 UpDirection = _mm_loadu_ps(&upDirection.x);
+
+		// negate because right handed, for left handed no need to negate
+		__m128 EyeDirection = _mm_sub_ps(EyePosition, FocusPosition);
+
+		__m128  R2 = SSEVectorNormalize(EyeDirection);
+		__m128  R0 = SSEVector3Cross(UpDirection, R2);
+		R0 = SSEVectorNormalize(R0);
+		__m128  R1 = SSEVector3Cross(R2, R0);
+		__m128  NegEyePosition = _mm_mul_ps(EyePosition, g_XMNegativeOne);
+		__m128 D0 = SSEVector3Dot(R0, NegEyePosition);
+		__m128 D1 = SSEVector3Dot(R1, NegEyePosition);
+		__m128 D2 = SSEVector3Dot(R2, NegEyePosition);
+		R0 = _mm_and_ps(R0, g_XMMask3);
+		R1 = _mm_and_ps(R1, g_XMMask3);
+		R2 = _mm_and_ps(R2, g_XMMask3);
+		D0 = _mm_and_ps(D0, g_XMMaskW);
+		D1 = _mm_and_ps(D1, g_XMMaskW);
+		D2 = _mm_and_ps(D2, g_XMMaskW);
+		D0 = _mm_or_ps(D0, R0);
+		D1 = _mm_or_ps(D1, R1);
+		D2 = _mm_or_ps(D2, R2);
+		Matrix4 M;
+		M.r[0] = D0;
+		M.r[1] = D1;
+		M.r[2] = D2;
+		M.r[3] = g_XMIdentityR3;
+		M = Matrix4::Transpose(M);
+		return M;
+	}
+
+	static Matrix3 VECTORCALL ConvertToMatrix3(const Matrix4 M)
+	{
+		Matrix3 result;
+		SSEStoreVector3(&result.x.x, M.r[0]);
+		SSEStoreVector3(&result.y.x, M.r[1]);
+		SSEStoreVector3(&result.z.x, M.r[2]);
+		return result;
 	}
 
 	static Quaternion VECTORCALL ExtractRotation(const Matrix4 M, bool rowNormalize = true) noexcept
@@ -485,15 +550,14 @@ AX_ALIGNED(16) struct Matrix4
 
 			root = sqrtf(M.m[i][i] - M.m[j][j] - M.m[k][k] + 1.0f);
 
-			Orientation[i ] = 0.5f * root;
+			Orientation[i] = 0.5f * root;
 			root = 0.5f / root;
 			Orientation[j] = root * (M.m[i][j] + M.m[j][i]);
 			Orientation[k] = root * (M.m[i][k] + M.m[k][i]);
-			Orientation.w = root * (M.m[j][k] - M.m[k][j]);
+			Orientation.w  = root * (M.m[j][k] - M.m[k][j]);
 		} 
 		return Orientation;
 	}
-
 	static Matrix4 VECTORCALL FromQuaternion(const Quaternion quaternion)
 	{
 		Matrix4 M;
@@ -503,62 +567,76 @@ AX_ALIGNED(16) struct Matrix4
 		__m128 Q0 = _mm_add_ps(q, q);
 		__m128 Q1 = _mm_mul_ps(q,Q0);
 
-		__m128 V0 = _mm_shuffle_ps(Q1,Q1,_MM_SHUFFLE(3,0,0,1));
+		__m128 V0 = _mm_shuffle_ps(Q1,Q1,_mm_shuffle(3,0,0,1));
 		V0 = _mm_and_ps(V0,g_XMMask3);
-		__m128 V1 = _mm_shuffle_ps(Q1,Q1,_MM_SHUFFLE(3,1,2,2));
+		__m128 V1 = _mm_shuffle_ps(Q1,Q1,_mm_shuffle(3,1,2,2));
 		V1 = _mm_and_ps(V1,g_XMMask3);
 		__m128  R0 = _mm_sub_ps(Constant1110,V0);
 		R0 = _mm_sub_ps(R0, V1);
 
-		V0 = _mm_shuffle_ps(q, q,_MM_SHUFFLE(3,1,0,0));
-		V1 = _mm_shuffle_ps(Q0,Q0,_MM_SHUFFLE(3,2,1,2));
+		V0 = _mm_shuffle_ps(q, q,_mm_shuffle(3,1,0,0));
+		V1 = _mm_shuffle_ps(Q0,Q0,_mm_shuffle(3,2,1,2));
 		V0 = _mm_mul_ps(V0, V1);
 
-		V1 = _mm_shuffle_ps(q, q,_MM_SHUFFLE(3,3,3,3));
-		__m128 V2 = _mm_shuffle_ps(Q0,Q0,_MM_SHUFFLE(3,0,2,1));
+		V1 = _mm_shuffle_ps(q, q,_mm_shuffle(3,3,3,3));
+		__m128 V2 = _mm_shuffle_ps(Q0,Q0,_mm_shuffle(3,0,2,1));
 		V1 = _mm_mul_ps(V1, V2);
 
 		__m128 R1 = _mm_add_ps(V0, V1);
 		__m128 R2 = _mm_sub_ps(V0, V1);
 
-		V0 = _mm_shuffle_ps(R1,R2,_MM_SHUFFLE(1,0,2,1));
-		V0 = _mm_shuffle_ps(V0,V0,_MM_SHUFFLE(1,3,2,0));
-		V1 = _mm_shuffle_ps(R1,R2,_MM_SHUFFLE(2,2,0,0));
-		V1 = _mm_shuffle_ps(V1,V1,_MM_SHUFFLE(2,0,2,0));
+		V0 = _mm_shuffle_ps(R1,R2,_mm_shuffle(1,0,2,1));
+		V0 = _mm_shuffle_ps(V0,V0,_mm_shuffle(1,3,2,0));
+		V1 = _mm_shuffle_ps(R1,R2,_mm_shuffle(2,2,0,0));
+		V1 = _mm_shuffle_ps(V1,V1,_mm_shuffle(2,0,2,0));
 
-		Q1 = _mm_shuffle_ps(R0,V0,_MM_SHUFFLE(1,0,3,0));
-		Q1 = _mm_shuffle_ps(Q1,Q1,_MM_SHUFFLE(1,3,2,0));
+		Q1 = _mm_shuffle_ps(R0,V0,_mm_shuffle(1,0,3,0));
+		Q1 = _mm_shuffle_ps(Q1,Q1,_mm_shuffle(1,3,2,0));
 		M.r[0] = Q1;
-		Q1 = _mm_shuffle_ps(R0,V0,_MM_SHUFFLE(3,2,3,1));
-		Q1 = _mm_shuffle_ps(Q1,Q1,_MM_SHUFFLE(1,3,0,2));
+		Q1 = _mm_shuffle_ps(R0,V0,_mm_shuffle(3,2,3,1));
+		Q1 = _mm_shuffle_ps(Q1,Q1,_mm_shuffle(1,3,0,2));
 		M.r[1] = Q1;
-		Q1 = _mm_shuffle_ps(V1,R0,_MM_SHUFFLE(3,2,1,0));
+		Q1 = _mm_shuffle_ps(V1,R0,_mm_shuffle(3,2,1,0));
 		M.r[2] = Q1;
 		M.r[3] = g_XMIdentityR3;
 		return M;
 	}
 
-	FINLINE static Vector4 VECTORCALL Vector3Transform(const Vector3f V, const Matrix4 M) noexcept
+	FINLINE static Matrix4 VECTORCALL Transpose(const Matrix4 M)
+	{
+		const __m128 vTemp1 = _mm_shuffle_ps(M.r[0], M.r[1], _mm_shuffle(1, 0, 1, 0));
+		const __m128 vTemp3 = _mm_shuffle_ps(M.r[0], M.r[1], _mm_shuffle(3, 2, 3, 2));
+		const __m128 vTemp2 = _mm_shuffle_ps(M.r[2], M.r[3], _mm_shuffle(1, 0, 1, 0));
+		const __m128 vTemp4 = _mm_shuffle_ps(M.r[2], M.r[3], _mm_shuffle(3, 2, 3, 2));
+		Matrix4 mResult;
+		mResult.r[0] = _mm_shuffle_ps(vTemp1, vTemp2, _mm_shuffle(2, 0, 2, 0));
+		mResult.r[1] = _mm_shuffle_ps(vTemp1, vTemp2, _mm_shuffle(3, 1, 3, 1));
+		mResult.r[2] = _mm_shuffle_ps(vTemp3, vTemp4, _mm_shuffle(2, 0, 2, 0));
+		mResult.r[3] = _mm_shuffle_ps(vTemp3, vTemp4, _mm_shuffle(3, 1, 3, 1));
+		return mResult;
+	}
+
+	FINLINE static Vector4 VECTORCALL Vector3Transform(const Vector3f V, const Matrix4& M) noexcept
 	{
 		__m128 vec = _mm_loadu_ps(&V.x);
-		__m128 vResult = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(0, 0, 0, 0));
+		__m128 vResult = _mm_shuffle_ps(vec, vec, _mm_shuffle(0, 0, 0, 0));
 		vResult = _mm_mul_ps(vResult, M.r[0]);
-		__m128 vTemp = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(1, 1, 1, 1));
+		__m128 vTemp = _mm_shuffle_ps(vec, vec, _mm_shuffle(1, 1, 1, 1));
 		vTemp = _mm_mul_ps(vTemp, M.r[1]);
 		vResult = _mm_add_ps(vResult, vTemp);
-		vTemp = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(2, 2, 2, 2));
+		vTemp = _mm_shuffle_ps(vec, vec, _mm_shuffle(2, 2, 2, 2));
 		vTemp = _mm_mul_ps(vTemp, M.r[2]);
 		vResult = _mm_add_ps(vResult, vTemp);
 		vResult = _mm_add_ps(vResult, M.r[3]);
 		return vResult;
 	}
 
-	FINLINE static Vector4 VECTORCALL Vector4Transform(Vector4 v, const Matrix4 m)
+	FINLINE static Vector4 VECTORCALL Vector4Transform(Vector4 v, const Matrix4& m)
 	{
-		__m128 v0 = _mm_mul_ps(m.r[0], _mm_shuffle_ps(v, v, _MM_SHUFFLE(0, 0, 0, 0)));
-		__m128 v1 = _mm_mul_ps(m.r[1], _mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 1, 1, 1)));
-		__m128 v2 = _mm_mul_ps(m.r[2], _mm_shuffle_ps(v, v, _MM_SHUFFLE(2, 2, 2, 2)));
-		__m128 v3 = _mm_mul_ps(m.r[3], _mm_shuffle_ps(v, v, _MM_SHUFFLE(3, 3, 3, 3)));
+		__m128 v0 = _mm_mul_ps(m.r[0], _mm_permute_ps(v.vec, _mm_shuffle(0, 0, 0, 0)));
+		__m128 v1 = _mm_mul_ps(m.r[1], _mm_permute_ps(v.vec, _mm_shuffle(1, 1, 1, 1)));
+		__m128 v2 = _mm_mul_ps(m.r[2], _mm_permute_ps(v.vec, _mm_shuffle(2, 2, 2, 2)));
+		__m128 v3 = _mm_mul_ps(m.r[3], _mm_permute_ps(v.vec, _mm_shuffle(3, 3, 3, 3)));
 		__m128 a0 = _mm_add_ps(v0, v1);
 		__m128 a1 = _mm_add_ps(v2, v3);
 		__m128 a2 = _mm_add_ps(a0, a1);

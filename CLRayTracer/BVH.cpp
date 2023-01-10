@@ -46,7 +46,7 @@ struct aabb
 	}
 };
 
-static uint nodesUsed = 0;
+static uint totalNodesUsed = 0;
 static BVHNode* nodes;
 
 #define GetCenteroid(tri, axis) SSEVectorGetW(*((__m128*)(tri) + axis)) 
@@ -200,8 +200,8 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 	int leftCount = i - leftFirst;
 	if (leftCount == 0 || leftCount == triCount) return;
 	// create child nodes
-	int leftChildIdx = nodesUsed++;
-	int rightChildIdx = nodesUsed++;
+	int leftChildIdx = totalNodesUsed++;
+	int rightChildIdx = totalNodesUsed++;
 	bvhNode[leftChildIdx].leftFirst = leftFirst;
 	bvhNode[leftChildIdx].triCount = leftCount;
 	bvhNode[rightChildIdx].leftFirst = i;
@@ -215,12 +215,11 @@ static void SubdivideBVH(BVHNode* bvhNode, Tri* tris, uint nodeIdx)
 	SubdivideBVH(bvhNode, tris, rightChildIdx);
 }
 
-BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices, uint* _nodesUsed)
+uint BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, uint* bvhIndices)
 {
 	// 1239.74ms SIMD
 	// 556.51ms  SIMD with custom swap
 	// 6511.79ms withut
-	
 	int numTriangles = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		numTriangles += meshes[i].numTriangles;
@@ -234,10 +233,12 @@ BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, ui
 		tri->centeroidy = (tri->vertex0.y + tri->vertex1.y + tri->vertex2.y) * 0.333333f;
 		tri->centeroidz = (tri->vertex0.z + tri->vertex1.z + tri->vertex2.z) * 0.333333f;
 	}
+	
+	uint nodesUsedStart = totalNodesUsed;
 	int currTriangle = 0;
 	for (int i = 0; i < numMeshes; ++i) {
 		// assign all triangles to root node
-		uint rootNodeIndex = nodesUsed++;
+		uint rootNodeIndex = totalNodesUsed++;
 
 		bvhIndices[i] = rootNodeIndex;
 		
@@ -250,6 +251,5 @@ BVHNode* BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes, ui
 		currTriangle += meshes[i].numTriangles;
 	}
 	
-	*_nodesUsed = nodesUsed;
-	return nodes;
+	return totalNodesUsed - nodesUsedStart;
 }

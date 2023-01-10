@@ -4,13 +4,6 @@
 #include "Window.hpp"
 #include "../Logger.hpp"
 
-struct Ray
-{
-	Vector3f origin;
-	Vector3f direction;
-	Ray(Vector3f o, Vector3f d) : origin(o), direction(d) {}
-};
-
 struct Camera
 {
 	Matrix4 projection;
@@ -77,7 +70,7 @@ struct Camera
 		Front.x = cosf(yaw * DegToRad) * cosf(pitch * DegToRad);
 		Front.y = sinf(pitch * DegToRad);
 		Front.z = sinf(yaw * DegToRad) * cosf(pitch * DegToRad);
-		Front.Normalized();
+		Front.NormalizeSelf();
 		// also re-calculate the Right and Up vector
 		Right = Vector3f::Normalize(Vector3f::Cross(Front, Vector3f::Up()));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		Up = Vector3f::Normalize(Vector3f::Cross(Right, Front));
@@ -109,14 +102,15 @@ struct Camera
 		inverseView = Matrix4::Inverse(view);
 	}
 
-	Ray ScreenPointToRay(Vector2i pos)
+	Ray ScreenPointToRay(Vector2f pos) const
 	{
-		Vector2f coord(float(pos.x) / (float)viewportSize.x, float(pos.y) / (float)viewportSize.y);
+		Vector2f coord(pos.x / (float)viewportSize.x, pos.y / (float)viewportSize.y);
+		coord.y = 1.0f - coord.y;
 		coord = coord * 2.0f - 1.0f;
-		Vector4 target = inverseProjection * Vector4(coord.x, coord.y, 1.0f, 1.0f);
+		Vector4 target = Matrix4::Vector4Transform(Vector4(coord.x, coord.y, 1.0f, 1.0f), inverseProjection);
 		target /= target.w;
-		target = inverseView * target.Normalized();
-		target.y = target.y;
-		return Ray(position, Vector3f(target.x, target.y, target.z));
+		target = Matrix4::Vector4Transform(target, inverseView);
+		Vector3f rayDir = Vector3f::Normalize(target.xyz());
+		return Ray(position, rayDir);
 	}
 };

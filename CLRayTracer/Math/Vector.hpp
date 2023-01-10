@@ -40,16 +40,16 @@ struct Vector2
 	
 	Vector2 Normalize(Vector2 other) { return other.Normalize(); }
 	
-	Vector2 operator-() { return Vector2(-x, -y); }
-	Vector2 operator+(Vector2 other) const { return Vector2(x + other.x, y + other.y); }
-	Vector2 operator*(Vector2 other) const { return Vector2(x * other.x, y * other.y); }
-	Vector2 operator/(Vector2 other) const { return Vector2(x / other.x, y / other.y); }
-	Vector2 operator-(Vector2 other) const { return Vector2(x - other.x, y - other.y); }
+	Vector2 operator - () { return Vector2(-x, -y); }
+	Vector2 operator + (Vector2 other) const { return Vector2(x + other.x, y + other.y); }
+	Vector2 operator * (Vector2 other) const { return Vector2(x * other.x, y * other.y); }
+	Vector2 operator / (Vector2 other) const { return Vector2(x / other.x, y / other.y); }
+	Vector2 operator - (Vector2 other) const { return Vector2(x - other.x, y - other.y); }
 
-	Vector2 operator+(T other) const { return Vector2(x + other, y + other); }
-	Vector2 operator*(T other) const { return Vector2(x * other, y * other); }
-	Vector2 operator/(T other) const { return Vector2(x / other, y / other); }
-	Vector2 operator-(T other) const { return Vector2(x - other, y - other); }
+	Vector2 operator + (T other) const { return Vector2(x + other, y + other); }
+	Vector2 operator * (T other) const { return Vector2(x * other, y * other); }
+	Vector2 operator / (T other) const { return Vector2(x / other, y / other); }
+	Vector2 operator - (T other) const { return Vector2(x - other, y - other); }
 	
 	Vector2 operator += (Vector2 o) { x += o.x; y += o.y; return *this; }
 	Vector2 operator *= (Vector2 o) { x *= o.x; y *= o.y; return *this; }
@@ -130,29 +130,29 @@ struct Vector3
 	static Vector3 Cross(const Vector3& a, const Vector3& b)
 	{
 		return Vector3(a.y * b.z - b.y * a.z,
-			a.z * b.x - b.z * a.x,
-			a.x * b.y - b.x * a.y);
+			           a.z * b.x - b.z * a.x,
+			           a.x * b.y - b.x * a.y);
 	}
 
 	static Vector3 Reflect(const Vector3& in, const Vector3& normal)
 	{
-		return in - normal * Dot(normal, in) * 2.0f;
+		return in - normal * Vector3::Dot(normal, in) * 2.0f;
 	}
 	// for more accuracy you can use sqrt instead of rsqrt: a / sqrt(dot(a,a)) 
 	static Vector3 Normalize(const Vector3& a) {
-		return a * rsqrt(Dot(a, a));
+		return a / sqrtf(Vector3::Dot(a, a));
 	}
 
-	Vector3 operator-() { return Vector3f(-x, -y, -z); }
-	Vector3 operator+(const Vector3& other) const { return Vector3(x + other.x, y + other.y, z + other.z); }
-	Vector3 operator*(const Vector3& other) const { return Vector3(x * other.x, y * other.y, z * other.z); }
-	Vector3 operator/(const Vector3& other) const { return Vector3(x / other.x, y / other.y, z / other.z); }
-	Vector3 operator-(const Vector3& other) const { return Vector3(x - other.x, y - other.y, z - other.z); }
+	Vector3 operator - () { return Vector3f(-x, -y, -z); }
+	Vector3 operator + (const Vector3& other) const { return Vector3(x + other.x, y + other.y, z + other.z); }
+	Vector3 operator * (const Vector3& other) const { return Vector3(x * other.x, y * other.y, z * other.z); }
+	Vector3 operator / (const Vector3& other) const { return Vector3(x / other.x, y / other.y, z / other.z); }
+	Vector3 operator - (const Vector3& other) const { return Vector3(x - other.x, y - other.y, z - other.z); }
 
-	Vector3 operator+(T other) const { return Vector3(x + other, y + other, z + other); }
-	Vector3 operator*(T other) const { return Vector3(x * other, y * other, z * other); }
-	Vector3 operator/(T other) const { return Vector3(x / other, y / other, z / other); }
-	Vector3 operator-(T other) const { return Vector3(x - other, y - other, z - other); }
+	Vector3 operator + (T other) const { return Vector3(x + other, y + other, z + other); }
+	Vector3 operator * (T other) const { return Vector3(x * other, y * other, z * other); }
+	Vector3 operator / (T other) const { return Vector3(x / other, y / other, z / other); }
+	Vector3 operator - (T other) const { return Vector3(x - other, y - other, z - other); }
 
 	Vector3 operator += (const Vector3& o) { x += o.x; y += o.y; z += o.z; return *this; }
 	Vector3 operator *= (const Vector3& o) { x *= o.x; y *= o.y; z *= o.z; return *this; }
@@ -164,9 +164,9 @@ struct Vector3
 	Vector3 operator /= (T o) { x /= o; y /= o; z /= o; return *this; }
 	Vector3 operator -= (T o) { x -= o; y -= o; z -= o; return *this; }
 
-	Vector3 xxx() { return Vector3(x, x, x); }
-	Vector3 yyy() { return Vector3(y, y, y); }
-	Vector3 zzz() { return Vector3(z, z, z); }
+	Vector3 xxx() const { return Vector3(x); }
+	Vector3 yyy() const { return Vector3(y); }
+	Vector3 zzz() const { return Vector3(z); }
 
 	static constexpr Vector3 Zero()    { return Vector3(0.0, 0.0, 0.0); }
 	static constexpr Vector3 One()     { return Vector3(1.0, 1.0, 1.0); }
@@ -193,6 +193,14 @@ using Vector3c = Vector3<char>;
 typedef Vector3f float3;
 typedef Vector2f float2;
 
+struct Ray
+{
+	Vector3f origin;
+	Vector3f direction;
+	Ray() {}
+	Ray(Vector3f o, Vector3f d) : origin(o), direction(d) {}
+};
+
 FINLINE float3 fminf(const float3& a, const float3& b) { return float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)); }
 FINLINE float3 fmaxf(const float3& a, const float3& b) { return float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)); }
 
@@ -205,7 +213,7 @@ FINLINE float Max3(const float3& a) { return fmaxf(fmaxf(a.x, a.y), a.z); }
 FINLINE float Min3(const float3& a) { return fminf(fminf(a.x, a.y), a.z); }
 
 FINLINE Vector2f ToVector2f(const Vector2i& vec) { return Vector2f((float)vec.x, (float)vec.y); }
-FINLINE Vector2i ToVector2f(const Vector2f& vec) { return Vector2i((int)vec.x, (int)vec.y);  }
+FINLINE Vector2i ToVector2i(const Vector2f& vec) { return Vector2i((int)vec.x, (int)vec.y);  }
 
 constexpr FINLINE uint WangHash(uint s) {
 	s = (s ^ 61u) ^ (s >> 16u);

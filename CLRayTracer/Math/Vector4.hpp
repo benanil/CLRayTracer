@@ -1,6 +1,6 @@
 #pragma once
 #include "SIMDCommon.hpp"
-#include "Math.hpp"
+#include "Vector.hpp"
 
 AX_ALIGNED(16) struct Vector4
 {
@@ -22,6 +22,8 @@ AX_ALIGNED(16) struct Vector4
 	constexpr Vector4(__m128 _vec) : vec(_vec) {}
 	constexpr Vector4(float scale) : x(scale), y(scale), z(scale), w(scale) {}
 	constexpr Vector4(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
+	
+	constexpr Vector4(const Vector3f& a, float f) : x(a.x), y(a.y), z(a.z), w(f) {}
 
 	operator __m128() const { return vec; }
 
@@ -38,6 +40,8 @@ AX_ALIGNED(16) struct Vector4
 	float Length() { return hsum_ps_sse3(_mm_dp_ps(vec, vec, 0xff)); }
 
 	Vector4& Normalized() { vec = _mm_mul_ps(_mm_rsqrt_ps(_mm_dp_ps(vec, vec, 0xff)), vec); return *this; }
+
+	Vector3f xyz() const { Vector3f v;  SSEStoreVector3(&v.x, vec); return v; }
 
 	Vector4 VECTORCALL operator + (const Vector4 b) const { return _mm_add_ps(vec, b.vec); }
 	Vector4 VECTORCALL operator - (const Vector4 b) const { return _mm_sub_ps(vec, b.vec); }
@@ -83,11 +87,11 @@ AX_ALIGNED(32) struct Vector4d
 	FINLINE static __m256d VECTORCALL Dot(const __m256d V1, const __m256d V2)
 	{
 		__m256d vDot = _mm256_mul_pd(V1, V2);
-		__m256d vTemp = _mm256_permute_pd(vDot, _MM_SHUFFLE(2, 1, 2, 1));
+		__m256d vTemp = _mm256_permute_pd(vDot, _mm_shuffle(2, 1, 2, 1));
 		vDot = _mm256_add_pd(vDot, vTemp);
-		vTemp = _mm256_permute_pd(vTemp, _MM_SHUFFLE(1, 1, 1, 1));
+		vTemp = _mm256_permute_pd(vTemp, _mm_shuffle(1, 1, 1, 1));
 		vDot = _mm256_add_pd(vDot, vTemp);
-		return _mm256_permute_pd(vDot, _MM_SHUFFLE(0, 0, 0, 0)); // Splat x
+		return _mm256_permute_pd(vDot, _mm_shuffle(0, 0, 0, 0)); // Splat x
 	}
 
 	Vector4d& Normalized() { vec = Normalize(vec); return *this; }
@@ -107,3 +111,5 @@ AX_ALIGNED(32) struct Vector4d
 	Vector4d& operator *= (const double b) { vec = _mm256_mul_pd(vec, _mm256_set1_pd(b)); return *this; }
 	Vector4d& operator /= (const double b) { vec = _mm256_div_pd(vec, _mm256_set1_pd(b)); return *this; }
 };
+
+typedef Vector4 float4;

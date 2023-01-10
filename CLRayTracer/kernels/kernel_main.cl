@@ -3,8 +3,6 @@
 // this commented header below automaticly included 
 // #include "MathAndSTL.cl"
 
-// todo seperate 
-
 // ---- STRUCTURES ----
 
 typedef struct _TraceArgs{
@@ -241,7 +239,7 @@ kernel void Trace(
 			// change ray position instead of mesh position for capturing in different positions
 			meshRay.origin = MatMul(instance.inverseTransform, (float4)(ray.origin, 1.0f)).xyz;
 			meshRay.direction = MatMul(instance.inverseTransform, (float4)(ray.direction, 0.0f)).xyz;
-			Matrix3 inverseTransposed = TransposeToMatrix3(instance.inverseTransform);
+			Matrix3 inverseMat3 = TransposeToMatrix3(instance.inverseTransform);
 
 			// instance.meshIndex = bvhIndex
 			if (IntersectBVH(meshRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
@@ -252,13 +250,11 @@ kernel void Trace(
 
 				record.point = meshRay.origin + triout.t * meshRay.direction;
 
-				float3 n0 = Mat3Mul(inverseTransposed, convert_float3(vload3(0, triangle.normal0))); 
-				float3 n1 = Mat3Mul(inverseTransposed, convert_float3(vload3(0, triangle.normal1)));
-				float3 n2 = Mat3Mul(inverseTransposed, convert_float3(vload3(0, triangle.normal2)));
+				float3 n0 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal0)) / 32766.0f); 
+				float3 n1 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal1)) / 32766.0f);
+				float3 n2 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal2)) / 32766.0f);
 
-				record.normal = ((n0 / 32766.0f) * baryCentrics.x) // fast_normalize(cross(triangle.y - triangle.z, triangle.z - triangle.x));
-					          + ((n1 / 32766.0f) * baryCentrics.y)
-					          + ((n2 / 32766.0f) * baryCentrics.z);
+				record.normal = normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
 
 				float2 uv = ((convert_float2(vload2(0, triangle.uv0)) / 32766.0f) * baryCentrics.x) 
 					      + ((convert_float2(vload2(0, triangle.uv1)) / 32766.0f) * baryCentrics.y)
@@ -294,7 +290,7 @@ kernel void Trace(
 		float ndl = dot(record.normal, -lightDir);
 		float3 ambient = max(0.0f - ndl, 0.1f) * atmosphericLight * record.color;
 		ndl = max(ndl, 0.0f);
-		float3 specular = (float3)((1.0f - roughness) * ndl * shadow) * specularColor; 
+		float3 specular = (float3)((1.0f - roughness) * ndl * shadow) * specularColor * ndl; 
 		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess) * 0.5f; // meshray direction = wi
 
 		result += energy * (record.color * ndl) + ambient + specularLighting;
@@ -303,8 +299,8 @@ kernel void Trace(
 		
 		lightDir = ray.direction;
 	}
-	// result = Saturation(result, 1.2f);
-	// result = ACESFilm(result);
+	result = Saturation(result, 1.2f);
+	result = ACESFilm(result);
 
 	write_imagef(screen, (int2)(pixelX, pixelY), (float4)(pow(result, oneDivGamma), 1.0f));
 }

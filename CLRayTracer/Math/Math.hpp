@@ -43,14 +43,14 @@ FINLINE float LerpAngle(const RealT a, const RealT b, const RealT t) noexcept
 	return a + delta * Clamp(t, 0.0, 1.0);
 }
 
-FINLINE float rsqrt(float number)
+FINLINE float RSqrt(float number)
 {
 	long i;
 	float x2, y;
 	x2 = number * 0.5F;
 	y  = number;
-	i  = * ( long * ) &y;                       // evil floating point bit level hacking
-	i  = 0x5f3759df - ( i >> 1 );               // what the fuck? 
+	i  = * ( long * ) &y;                 // evil floating point bit level hacking
+	i  = 0x5f3759df - ( i >> 1 );         // what the fuck? 
 	y  = * ( float * ) &i;
 	y  = y * ( 1.5f - ( x2 * y * y ) );   // 1st iteration
 	return y;

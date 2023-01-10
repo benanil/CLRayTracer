@@ -1,12 +1,12 @@
 #pragma once
 #include "ResourceManager.hpp"
-#include "Math/Matrix.hpp"
+#include "Math/Camera.hpp"
 
 // internal struct do not use
 struct MeshInstance { 
-	Matrix4 transform; // todo add rotation and scale aka matrix
+	Matrix4 transform; 
 	Matrix4 inverseTransform;
-	ushort meshIndex; 
+	ushort meshIndex;  
 	ushort materialStart; // each submesh can have material
 };
 
@@ -62,7 +62,7 @@ namespace Renderer
 	
 	void SetMeshPosition(MeshInstanceHandle handle, float3 position);
 	void SetMeshMatrix(MeshInstanceHandle handle, const Matrix4& matrix);
-	// todo rotation scale 
+	const Camera& GetCamera();
 }
 
 
