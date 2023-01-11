@@ -84,16 +84,12 @@ Matrix4 Transpose(Matrix4 M)
 	return mResult;
 }
 
-Matrix3 TransposeToMatrix3(Matrix4 M)
+Matrix3 ConvertToMatrix3(Matrix4 M)
 {
-	// float4 vTemp1 = shuffle2(M.x, M.y, (uint4)(0, 1, 4, 5));
-	// float4 vTemp3 = shuffle2(M.x, M.y, (uint4)(2, 3, 6, 7));
-	// float4 vTemp2 = shuffle2(M.z, M.w, (uint4)(0, 1, 4, 5));
-	// float4 vTemp4 = shuffle2(M.z, M.w, (uint4)(2, 3, 6, 7));
 	Matrix3 mResult;
-	mResult.x = M.x.xyz;// shuffle2(vTemp1, vTemp2, (uint4)(0, 2, 4, 6)).xyz;
-	mResult.y = M.y.xyz;// shuffle2(vTemp1, vTemp2, (uint4)(1, 3, 5, 7)).xyz;
-	mResult.z = M.z.xyz;// shuffle2(vTemp3, vTemp4, (uint4)(0, 2, 4, 6)).xyz;
+	mResult.x = M.x.xyz;
+	mResult.y = M.y.xyz;
+	mResult.z = M.z.xyz;
 	return mResult;
 }
 
@@ -118,13 +114,25 @@ float3 reflect(float3 v, float3 n) {
 	return v - n * dot(n, v) * 2.0f;
 }
 
+float luminance(float3 v)
+{
+	return dot(v, (float3)(0.2126f, 0.7152f, 0.0722f));
+}
+
+float3 change_luminance(float3 c_in, float l_out)
+{
+	float l_in = luminance(c_in);
+	return c_in * (l_out / l_in);
+}
+
+constant float max_white_l = 0.8f;
+
 float3 ACESFilm(float3 x) {
-	// Aces here
-	// constant float a = 2.51f; const float b = 0.03f;
-	// constant float c = 2.43f; const float d = 0.59f;
-	// constant float e = 0.14f;
-	// x = clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0f, 1.0f);
-	x = x / (1.0f + x); // reinard 
+	float l_old = luminance(x);
+	float numerator = l_old * (1.0f + (l_old / (max_white_l * max_white_l)));
+	float l_new = numerator / (1.0f + l_old);
+	x = change_luminance(x, l_new);
+
 	float gamma = 1.55f;
 	x = pow(x, (float3)(1.0f / gamma));
 	return x;
@@ -159,13 +167,6 @@ constant float InfMinusOne = 99998.0f;
 constant float UcharToFloat01 = 1.0f / 255.0f;
 constant float oneDivGamma = 1.0f / 1.2f;
 constant float c_FMul = (1.0 / 16777216.0f);
-
-float3 UnpackRGB8u(uint u)  
-{
-	return (float3)(u & 255, u >> 8 & 255, u >> 16 & 255) * UcharToFloat01;
-}
-
-#define UNPACK_RGB8(rgb8) ((float3)(rgb8.r, rgb8.g, rgb8.b) * UcharToFloat01)
 
 // ---- RANDOM ----
 
@@ -207,7 +208,7 @@ Ray CreateRay(float3 origin, float3 dir)
 	return ray;
 }
 
-// ---- TEXTURE ----
+// ---- TEXTURE & COLOR ----
 
 typedef struct _Texture {
 	int width, height, offset, padd;
@@ -218,40 +219,27 @@ typedef struct __attribute__((packed)) _RGB8
 	unsigned char r,g,b;
 } RGB8;
 
+float3 UnpackRGB8u(uint u)  
+{
+	return (float3)(u & 255, u >> 8 & 255, u >> 16 & 255) * UcharToFloat01;
+}
+
+float3 MultiplyColorU32(RGB8 b, uint a)
+{
+	b.r = ((a & 0xff) * b.r) >> 8;
+	b.g = (((a >> 8)  & 0xff) * b.g) >> 8;
+	b.b = (((a >> 16) & 0xff) * b.b) >> 8;
+	return (float3)(b.r, b.g, b.b) * UcharToFloat01;
+}
+
+#define UNPACK_RGB8(rgb8) ((float3)(rgb8.r, rgb8.g, rgb8.b) * UcharToFloat01)
+
 int SampleSkyboxPixel(float3 rayDirection, Texture texture)
 {
 	int theta = (int)(atan2pi(rayDirection.x, -rayDirection.z) * 0.5f * (float)(texture.width)); 
 	int phi = (int)(acospi(rayDirection.y) * (float)(texture.height)); 
 	return mad24(phi, texture.width, theta + 2);
 }
-
-int SampleSphereTexture(float3 position, float3 center, Texture texture)
-{
-	float3 direction = fast_normalize(position - center);
-	int theta = (int)(atan2pi(direction.x, direction.z) * .5f * (float)(texture.width)); 
-	int phi   = (int)(acospi(direction.y) * (float)(texture.height)); 
-	return phi * texture.width + (theta + texture.offset);
-}
-
-int SampleRotatedSphereTexture(float3 position, float3 center, float rotationx, float rotationy, Texture texture)
-{
-	float3 direction = fast_normalize(position - center);
-
-	float cosTheta = rotationx; 
-	float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
-	float phi = 2.0f * M_PI_F * rotationy;
-
-	float3 tangentSpaceDir = (float3)(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-	
-	direction = Mat3Mul(GetTangentSpace(direction), tangentSpaceDir);
-	
-	int theta = (int)(atan2pi(direction.x, direction.z) * .5f * (float)(texture.width)); 
-	phi   = (int)(acospi(direction.y) * (float)(texture.height)); 
-	
-	return mad24(phi, texture.width, theta + texture.offset);
-}
-
-#define SAMPLE_SPHERE_TEXTURE(pos, center, texture) texturePixels[SampleSphereTexture(pos, center, texture)]
 
 int SampleTexture(Texture texture, float2 uv)
 {

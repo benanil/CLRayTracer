@@ -58,9 +58,8 @@ void Engine_Start()
 	Editor::AddOnEditor(DisplayProfilerStats);
 	ResourceManager::PrepareMeshes();
 	// skybox texture no need to store handle
-	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
+	ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 	
-	char jupiterTexture = ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 	bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
 	nanosuitMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
 	boxMesh = ResourceManager::ImportMesh("Assets/sphere.obj");
@@ -69,7 +68,7 @@ void Engine_Start()
 
 	ResourceManager::PushMeshesToGPU();
 	ResourceManager::PushTexturesToGPU();
-	// todo create instances
+	
 	Renderer::BeginInstanceRegister();
 
 	Renderer::RegisterMeshInstance(bmwMesh, ResourceManager::DefaultMaterial, bmwTransform.GetMatrix());
@@ -83,10 +82,12 @@ float Engine_Tick()
 {
 	float dt = (float)Window::DeltaTime();
 	static float rotation = 0.0f;
+	static bool clicked = false;
+
 	bool positionChanged = false;
 	
 	bool pressing = Window::GetMouseButton(MouseButton_Right);
-	
+
 	float speed = (dt * 5.0f) + (Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
 	Vector3f dir{};
 	
@@ -108,7 +109,8 @@ float Engine_Tick()
 	}
 	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 
-	if (Window::GetMouseButton(MouseButton_Left))
+
+	if (clicked && Window::GetMouseButtonUp(MouseButton_Left))
 	{
 		const Camera& camera = Renderer::GetCamera();
 		Vector2f mousePos = Window::GetMouseWindowPos();
@@ -118,12 +120,13 @@ float Engine_Tick()
 		
 		if (record.distance != RayacastMissDistance)
 		{
-			// printf("record distance: %f, index: %d\n", record.distance, record.index);
-			printf("record normal: %f, %f, %f\n", record.normal.x, record.normal.y, record.normal.z);
-			Renderer::SetMeshPosition(boxMesh, ray.origin + (ray.direction * record.distance));
+			// Renderer::SetMeshPosition(boxMesh, ray.origin + (ray.direction * record.distance));
+			Material& material = ResourceManager::EditMaterial(7);
+			material.color = record.color;
+			ResourceManager::PushMaterialsToGPU();
 		}
 	}
-
+	clicked = Window::GetMouseButton(MouseButton_Left);
 	return SunAngle;
 }
 

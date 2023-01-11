@@ -29,12 +29,8 @@ namespace
 	cl_command_queue command_queue;
 	cl_program program;
 
-	cl_mem clglScreen, rayMem, sphereMem, instanceMem;
+	cl_mem clglScreen, rayMem, instanceMem;
 	cl_int clerr;
-		
-	uint NumSpheres = 0;
-	Sphere spheres[Renderer::MaxNumSpheres];
-	MeshInstance meshInstances[Renderer::MaxNumInstances];
 
 	GLuint VAO;
 	GLuint shaderProgram;
@@ -47,7 +43,12 @@ namespace
 const Camera& Renderer::GetCamera() { return camera; }
 
 // extern for cpu ray trace
-uint numMeshInstances = 0u;
+uint g_NumMeshInstances = 0u;
+Matrix4 m_MeshTransforms[Renderer::MaxNumInstances];
+MeshInstance m_MeshInstances[Renderer::MaxNumInstances];
+
+Matrix4* g_MeshTransforms = m_MeshTransforms;
+MeshInstance* g_MeshInstances = m_MeshInstances;
 
 typedef void (*GLFWglproc)(void);
 extern "C" GLFWglproc glfwGetProcAddress(const char* procname); 
@@ -61,17 +62,6 @@ void Renderer::CreateGLTexture(GLuint& texture, int width, int height, void* dat
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-}
-
-SphereHandle Renderer::PushSphere(const Sphere& sphere)
-{
-	spheres[NumSpheres] = sphere;
-	return NumSpheres++;
-}
-
-void Renderer::RemoveSphere(SphereHandle sphere)
-{
-	spheres[sphere] = spheres[NumSpheres--];
 }
 
 static void InitializeOpenGL()
@@ -189,7 +179,7 @@ int Renderer::Initialize()
 	
 	InitializeOpenGL();
 	InitializeOpenCL();
-	CPU_RayTraceInitialize(meshInstances);
+	CPU_RayTraceInitialize();
 
 	// initialize buffers
 	instanceMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(MeshInstance) * MaxNumInstances, nullptr, &clerr); assert(clerr == 0);
@@ -200,13 +190,7 @@ int Renderer::Initialize()
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
 
 	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
-	sphereMem  = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(Sphere) * MaxNumSpheres, nullptr, &clerr); assert(clerr == 0);
 	return 1;
-}
-
-void Renderer::UpdateSpheres()
-{
-	clerr = clEnqueueWriteBuffer(command_queue, sphereMem, false, 0, NumSpheres * sizeof(Sphere), spheres, 0, 0, 0); assert(clerr == 0);
 }
 
 void Renderer::OnKeyPressed(int keyCode, int action) {}
@@ -242,21 +226,22 @@ MeshInstanceHandle Renderer::RegisterMeshInstance(
 MeshInstanceHandle Renderer::RegisterMeshInstance(
 	MeshHandle handle, MaterialHandle materialHandle, const Matrix4& matrix)
 {
-	if (numMeshInstances >= MaxNumInstances) { AXERROR("too many mesh instances please reduce number of instances or increase number of instances!"); exit(0); }
+	if (g_NumMeshInstances >= MaxNumInstances) { AXERROR("too many mesh instances please reduce number of instances or increase number of instances!"); exit(0); }
 	
 	if (materialHandle == ResourceManager::DefaultMaterial) {
 		materialHandle = ResourceManager::GetMeshInfo(handle).materialStart;
 	}
 
-	MeshInstance& instance = meshInstances[numMeshInstances++];
-	instance.transform = matrix;
+	MeshInstance& instance = g_MeshInstances[g_NumMeshInstances];
+	g_MeshTransforms[g_NumMeshInstances++] = matrix;
+	instance.inverseTransform = Matrix4::InverseTransform(matrix);
 	instance.meshIndex = handle;
 	instance.materialStart = materialHandle;
 	return numRegisteredInstances++;
 }
 
 void Renderer::EndInstanceRegister() {
-	clerr = clEnqueueWriteBuffer(command_queue, instanceMem, true, lastRegisterInstanceIndex * sizeof(MeshInstance), numRegisteredInstances * sizeof(MeshInstance), meshInstances + lastRegisterInstanceIndex, 0, 0, 0);	
+	clerr = clEnqueueWriteBuffer(command_queue, instanceMem, true, lastRegisterInstanceIndex * sizeof(MeshInstance), numRegisteredInstances * sizeof(MeshInstance), g_MeshInstances + lastRegisterInstanceIndex, 0, 0, 0);	
 	lastRegisterInstanceIndex += numRegisteredInstances;
 	numRegisteredInstances = 0;
 }
@@ -275,34 +260,36 @@ void Renderer::RemoveMeshInstance(MeshInstanceHandle handle) {
 
 void Renderer::SetMeshInstanceMaterial(MeshInstanceHandle instanceHandle, MaterialHandle materialHandle)
 {
-	meshInstances[instanceHandle].materialStart = materialHandle; shouldUpdateInstances = true;
+	g_MeshInstances[instanceHandle].materialStart = materialHandle; shouldUpdateInstances = true;
 	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
 	MaxUpdatedInstanceIndex = Max(instanceHandle+1, (uint)MaxUpdatedInstanceIndex);
 }
 
 void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 position)
 {
-	MeshInstance& instance = meshInstances[instanceHandle];
-	instance.transform.r[3] = SSESelect(instance.transform.r[3], _mm_setr_ps(position.x, position.y, position.z, 0), g_XMSelect1110); 
-	instance.inverseTransform = Matrix4::InverseTransform(instance.transform);
+	MeshInstance& instance = g_MeshInstances[instanceHandle];
+	Matrix4& transform = g_MeshTransforms[instanceHandle];
+	transform.r[3] = SSESelect(transform.r[3], _mm_setr_ps(position.x, position.y, position.z, 0), g_XMSelect1110); 
+	instance.inverseTransform = Matrix4::InverseTransform(transform);
 
 	shouldUpdateInstances = true;
 	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
 	MaxUpdatedInstanceIndex = Max(instanceHandle+1, (uint)MaxUpdatedInstanceIndex);
 }
 
-void Renderer::SetMeshMatrix(MeshInstanceHandle instanceHandle, const Matrix4& transform)
+void Renderer::SetMeshMatrix(MeshInstanceHandle instanceHandle, const Matrix4& matrix)
 {
-	MeshInstance& instance = meshInstances[instanceHandle];
-	instance.transform = transform;
-	instance.inverseTransform = Matrix4::InverseTransform(instance.transform);
+	MeshInstance& instance = g_MeshInstances[instanceHandle];
+	Matrix4& transform = g_MeshTransforms[instanceHandle];
+	transform = matrix;
+	instance.inverseTransform = Matrix4::InverseTransform(transform);
 
 	shouldUpdateInstances = true;
 	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
 	MaxUpdatedInstanceIndex = Max(instanceHandle+1, (uint)MaxUpdatedInstanceIndex);	
 }
 
-void Renderer::ClearAllInstances() { numMeshInstances = 0; }
+void Renderer::ClearAllInstances() { g_NumMeshInstances = 0; }
 
 unsigned Renderer::Render(float sunAngle)
 {
@@ -316,7 +303,7 @@ unsigned Renderer::Render(float sunAngle)
 			clEnqueueWriteBuffer(command_queue, instanceMem
 			  , true, MinUpdatedInstanceIndex * sizeof(MeshInstance)
 			  , (MaxUpdatedInstanceIndex - MinUpdatedInstanceIndex) * sizeof(MeshInstance)
-			  , meshInstances + MinUpdatedInstanceIndex, 0, 0, 0);
+			  , g_MeshInstances + MinUpdatedInstanceIndex, 0, 0, 0);
 			MinUpdatedInstanceIndex = 0xFFFFu; MaxUpdatedInstanceIndex = 0x0u;
 			shouldUpdateInstances = false;
 		}
@@ -328,21 +315,20 @@ unsigned Renderer::Render(float sunAngle)
 		struct TraceArgs {
 			Vector3f cameraPosition;
 			float time;
-			uint numSpheres, numMeshes;
+			uint numMeshes;
 			float sunAngle;
 		} trace_args;
 
 		trace_args.cameraPosition = camera.position;
-		trace_args.numSpheres = NumSpheres;
-		trace_args.numMeshes = numMeshInstances;
+		trace_args.numMeshes = g_NumMeshInstances;
 		trace_args.sunAngle = sunAngle;
 		trace_args.time = time;
 
 		cl_int clerr; cl_event event;
 
 		// prepare ray generation kernel
-		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &camera.projWidth);                 assert(clerr == 0);
-		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &camera.projHeight);                 assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &camera.projWidth);             assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &camera.projHeight);            assert(clerr == 0);
 		clerr = clSetKernelArg(rayGenKernel, 2, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
 		clerr = clSetKernelArg(rayGenKernel, 3, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
 		clerr = clSetKernelArg(rayGenKernel, 4, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
@@ -360,11 +346,10 @@ unsigned Renderer::Render(float sunAngle)
 		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &bvhIndicesMem   ); assert(clerr == 0);
 		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &meshTriangleMem ); assert(clerr == 0);
 		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem          ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 6, sizeof(cl_mem), &sphereMem       ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 7, sizeof(TraceArgs), &trace_args   );  assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &bvhMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &materialsMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 10, sizeof(cl_mem), &instanceMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 6, sizeof(TraceArgs), &trace_args   );  assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &bvhMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &materialsMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &instanceMem); assert(clerr == 0);
 
 		// execute rendering
 		clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
@@ -390,7 +375,6 @@ void Renderer::Terminate()
 	// cleanup - release OpenCL resources
 	clReleaseMemObject(clglScreen);
 	clReleaseMemObject(rayMem);
-	clReleaseMemObject(sphereMem);
 	clReleaseMemObject(instanceMem);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(command_queue);

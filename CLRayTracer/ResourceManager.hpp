@@ -10,6 +10,11 @@ AX_ALIGNED(16) struct BVHNode
 	union { struct { float3 aabbMax; uint triCount; };  __m128 maxv; };
 };
 
+#pragma pack(1)
+struct RGB8 {
+	unsigned char r, g, b;
+};
+
 struct MeshInfo {
 	uint numTriangles; 
 	uint triangleStart; 
@@ -42,17 +47,6 @@ struct Material {
 	ushort specularTextureIndex;  
 	ushort shininess, roughness;
 };
-
-#pragma pack(1)
-typedef struct Sphere_t
-{
-	float position[3];
-	float radius;
-	float roughness;
-	unsigned color;
-	short rotationx, rotationy; //
-	float shininess;
-} Sphere;
 
 #pragma pack(1)
 AX_ALIGNED(16) struct Tri { 
@@ -103,6 +97,7 @@ namespace ResourceManager
 	// manipulate returning material's properties and use handle for other things, REF handle
 	// for using with multiple submeshes you need to set count to number of submeshes
 	Material* CreateMaterial(MaterialHandle* handle, int count = 1);
+	Material& EditMaterial(MaterialHandle handle);
 
 	void PrepareMeshes();
 	void PushMeshesToGPU();
@@ -110,18 +105,12 @@ namespace ResourceManager
 	ushort GetNumMeshes();
 
 	MeshInfo GetMeshInfo(MeshHandle handle);
-	TextureInfo GetTextureInfo(TextureInfo handle);
+	TextureInfo GetTextureInfo(TextureHandle handle);
 
 	void Initialize(cl_context context, cl_command_queue commandQueue);
 	void Destroy();
 	void Finalize();
 
 	void PushTexturesToGPU();
-	
-	BVHNode* GetBVHNodes();
-	uint* GetBVHIndices();
-	Material* GetMaterials();
-	Tri* GetTriangles();
-	Texture* GetTextures();
 }
 

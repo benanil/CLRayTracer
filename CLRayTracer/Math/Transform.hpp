@@ -5,7 +5,7 @@
 class Transform
 {
 private:
-	Matrix4 transform{};
+	Matrix4 transform = Matrix4::Identity();
 public:
 	Vector3f position{};
 	bool needsUpdate = false;

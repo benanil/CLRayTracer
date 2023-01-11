@@ -8,7 +8,7 @@
 typedef struct _TraceArgs{
 	float cameraPos[3];
 	float time;
-	uint numSpheres, numMeshes;
+	uint numMeshes;
 	float sunAngle;
 } TraceArgs;
 
@@ -17,14 +17,6 @@ typedef struct _RayHit {
 	float  distance;
 	int    index;
 } RayHit;
-
-typedef struct _Sphere {
-	float position[3]; 
-	float radius;
-	float roughness;
-	uint  color; // w texture index
-	float rotationx, rotationy;
-} Sphere;
 
 typedef struct _HitRecord {
 	float3 color, normal, point;
@@ -54,7 +46,6 @@ typedef struct _Triout {
 } Triout;
 
 typedef struct _MeshInstance { 
-	Matrix4 transform;
 	Matrix4 inverseTransform;
 	ushort meshIndex, materialStart; 
 } MeshInstance;
@@ -72,32 +63,8 @@ RayHit CreateRayHit() {
 
 HitRecord CreateHitRecord() {
 	HitRecord record;
-	record.color  = (float3)(0.90f, 0.90f, 0.90f); // plane color
 	record.normal = (float3)(0.0f, 1.0f, 0.0f);
 	return record;
-}
-
-bool IntersectSphere(float3 position, float radius, Ray ray, RayHit* besthit, int i) 
-{
-	float3 origin = ray.origin - position;
-	
-	float a = dot(ray.direction, ray.direction);
-	float b = 2.0f * dot(origin, ray.direction);
-	float c = dot(origin, origin) - radius * radius;
-
-	float discriminant = b * b - 4.0f * a * c;
-	
-	if (discriminant < 0.0f) return false;
-
-	float closestT = (-b - sqrt(discriminant)) / (2.0f * a);
-	 
-	if (closestT > 0.0f && closestT < besthit->distance)
-	{
-		besthit->distance = closestT;
-		besthit->index = i;
-		return true;
-	}
-	return false;
 }
 
 bool IntersectPlane(Ray ray, RayHit* besthit)
@@ -199,7 +166,6 @@ kernel void Trace(
 	global const uint* bvhIndices,
 	global const Triangle* triangles,
 	global const float* rays, 
-	global const Sphere* spheres,
 	TraceArgs trace_args,
 	global const BVHNode* nodes,
 	global const Material* materials,
@@ -216,20 +182,17 @@ kernel void Trace(
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
 	float3 atmosphericLight = (float3)(0.255f, 0.25f, 0.27f) * 1.0f;
 	
-	for (int j = 0; j < 2; ++j)// num bounces
+	for (int numBounces = 0; numBounces < 2; ++numBounces)
 	{
 		RayHit besthit = CreateRayHit();
 		HitRecord record = CreateHitRecord();
 		float roughness = 0.75f; // plane roughness
 		float shininess = 20.0f;
 		float3 specularColor = (float3)(0.8f, 0.7f, 0.6f);
-		
-		if (IntersectPlane(ray, &besthit)) {
-			record.point = ray.origin + ray.direction * besthit.distance;
-			record.color = (float3)(70.0f / 255.0f, 70.0f/ 255.0f, 70.0f/ 255.0f);
-		}
 
+		Triout hitOut;
 		Ray meshRay;
+		int hitInstanceIndex = 0;
 		for (int i = 0; i < trace_args.numMeshes; ++i)
 		{
 			Triout triout;
@@ -237,37 +200,17 @@ kernel void Trace(
 			triout.triIndex = 0;
 			MeshInstance instance = meshInstances[i];
 			// change ray position instead of mesh position for capturing in different positions
-			meshRay.origin = MatMul(instance.inverseTransform, (float4)(ray.origin, 1.0f)).xyz;
-			meshRay.direction = MatMul(instance.inverseTransform, (float4)(ray.direction, 0.0f)).xyz;
-			Matrix3 inverseMat3 = TransposeToMatrix3(instance.inverseTransform);
-
+			Ray mRay;
+			mRay.origin = MatMul(instance.inverseTransform, (float4)(ray.origin, 1.0f)).xyz;
+			mRay.direction = MatMul(instance.inverseTransform, (float4)(ray.direction, 0.0f)).xyz;
+			
 			// instance.meshIndex = bvhIndex
-			if (IntersectBVH(meshRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
+			if (IntersectBVH(mRay, nodes, bvhIndices[instance.meshIndex], triangles, &triout)) 
 			{
-				Triangle triangle = triangles[triout.triIndex];
-				Material material = materials[instance.materialStart + triangle.materialIndex];
-				float3 baryCentrics = (float3)(1.0f - triout.u - triout.v, triout.u, triout.v);
-
-				record.point = meshRay.origin + triout.t * meshRay.direction;
-
-				float3 n0 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal0)) / 32766.0f); 
-				float3 n1 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal1)) / 32766.0f);
-				float3 n2 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal2)) / 32766.0f);
-
-				record.normal = normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
-
-				float2 uv = ((convert_float2(vload2(0, triangle.uv0)) / 32766.0f) * baryCentrics.x) 
-					      + ((convert_float2(vload2(0, triangle.uv1)) / 32766.0f) * baryCentrics.y)
-					      + ((convert_float2(vload2(0, triangle.uv2)) / 32766.0f) * baryCentrics.z);
-				
-				RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
-				RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], uv)];
-
-				record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
-				specularColor = UNPACK_RGB8(specularPixel) * UnpackRGB8u(material.specularColor);
-				besthit.distance = triout.t;	
-				roughness = material.roughness / 65000.0f;
-				shininess = material.shininess / 65000.0f * 100.0f;
+				hitInstanceIndex = i;
+				hitOut = triout;
+				besthit.distance = triout.t;
+				meshRay = mRay;
 			}
 		}	
 		
@@ -278,6 +221,33 @@ kernel void Trace(
 			break;
 		}
 	
+		MeshInstance hitInstance = meshInstances[hitInstanceIndex];
+		Matrix3 inverseMat3 = ConvertToMatrix3(hitInstance.inverseTransform);
+		Triangle triangle = triangles[hitOut.triIndex];
+		Material material = materials[hitInstance.materialStart + triangle.materialIndex];
+		float3 baryCentrics = (float3)(1.0f - hitOut.u - hitOut.v, hitOut.u, hitOut.v);
+
+		float3 n0 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal0)) / 32766.0f); 
+		float3 n1 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal1)) / 32766.0f);
+		float3 n2 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal2)) / 32766.0f);
+
+		record.normal = normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
+
+		float2 uv = ((convert_float2(vload2(0, triangle.uv0)) / 32766.0f) * baryCentrics.x) 
+			+ ((convert_float2(vload2(0, triangle.uv1)) / 32766.0f) * baryCentrics.y)
+			+ ((convert_float2(vload2(0, triangle.uv2)) / 32766.0f) * baryCentrics.z);
+				
+		RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
+		RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], uv)];
+
+		record.color = MultiplyColorU32(pixel, material.color);
+		record.point = meshRay.origin + hitOut.t * meshRay.direction;
+		
+		specularColor = MultiplyColorU32(specularPixel, material.specularColor);
+			
+		roughness = material.roughness / 65000.0f;
+		shininess = material.shininess / 65000.0f * 100.0f;
+
 		ray.origin = record.point;
 		ray.origin += record.normal * 0.01f;
 		ray.direction = reflect(ray.direction, record.normal); // wo = ray.direction now = outgoing ray direction

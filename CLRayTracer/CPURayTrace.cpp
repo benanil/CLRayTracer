@@ -14,22 +14,16 @@ typedef struct _Triout {
 	float t, u, v; uint triIndex;
 } Triout;
 
-#pragma pack(1)
-struct RGB8 {
-	unsigned char r, g, b;
-};
-
-namespace 
-{
-	uint* bvhIndices = nullptr;
-	Tri* triangles  = nullptr;
-	BVHNode* bvhNodes = nullptr;
-	Material* materials = nullptr;
-	MeshInstance* meshInstances = nullptr;
-
-	RGB8* texturePixels = nullptr;
-	Texture* textures = nullptr;
-}
+// from ResourceManager.cpp
+extern uint* g_BVHIndices;
+extern Tri* g_Triangles  ;
+extern BVHNode* g_BVHNodes ;
+extern Material* g_Materials;
+extern RGB8* g_TexturePixels;
+extern Texture* g_Textures;
+// from Renderer.cpp
+extern MeshInstance* g_MeshInstances;
+extern uint g_NumMeshInstances;
 
 static inline RayHit CreateRayHit() {
 	RayHit hit; 
@@ -40,24 +34,12 @@ static inline RayHit CreateRayHit() {
 
 static inline HitRecord CreateHitRecord() {
 	HitRecord record;
-	record.color  = float3(0.90f, 0.90f, 0.90f); // plane color
 	record.normal = float3(0.0f, 1.0f, 0.0f);
+	record.distance = RayacastMissDistance;
 	return record;
 }
 
-static bool IntersectPlane(const Ray& ray, RayHit* besthit)
-{
-	float t = -ray.origin.y / ray.direction.y;
-	if (t > 0.0f && t < besthit->distance) 
-	{
-		float3 point = ray.origin + (ray.direction * t);
-		if (fabsf(point.x) < 80.0f && fabsf(point.z) < 80.0f)
-			besthit->distance = t;
-		return true;
-	}
-	return false;
-}
-
+// todo simd
 static bool IntersectTriangle(const Ray& ray, const Tri* tri, Triout* o, int i)
 {
 	const float3 edge1 = tri->vertex1 - tri->vertex0;
@@ -81,7 +63,7 @@ static bool IntersectTriangle(const Ray& ray, const Tri* tri, Triout* o, int i)
 	return false;
 }
 
-static
+static 
 float IntersectAABB(const float3& origin, const float3& invDir, const float3& aabbMin, const float3& aabbMax, float minSoFar)
 {
 	float3 tmin = (aabbMin - origin) * invDir;
@@ -96,8 +78,7 @@ float IntersectAABB(const float3& origin, const float3& invDir, const float3& aa
 #define SWAPF(x, y) float tf = x; x = y, y = tf;
 #define SWAPUINT(x, y) uint tu = x; x = y, y = tu;
 
-static 
-int IntersectBVH(const Ray& ray, const BVHNode* nodes, uint rootNode, const Tri* tris, Triout* out)
+static int IntersectBVH(const Ray& ray, const BVHNode* nodes, uint rootNode, const Tri* tris, Triout* out)
 {
 	int nodesToVisit[32] = { rootNode };
 	int currentNodeIndex = 1;
@@ -136,14 +117,9 @@ int IntersectBVH(const Ray& ray, const BVHNode* nodes, uint rootNode, const Tri*
 	return intersection;
 }
 
-void CPU_RayTraceInitialize(MeshInstance* instances)
+void CPU_RayTraceInitialize()
 {
-	meshInstances = instances;
-	bvhNodes   = ResourceManager::GetBVHNodes();
-	materials  = ResourceManager::GetMaterials();
-	triangles  = ResourceManager::GetTriangles();
-	bvhIndices = ResourceManager::GetBVHIndices();
-	textures   = ResourceManager::GetTextures();
+	// maybe fill later
 }
 
 FINLINE float2 ConvertHalf2ToFloat2(const short* h) {
@@ -159,6 +135,15 @@ FINLINE float3 ConvertHalf3ToFloat3(const short* h) {
 	r.y = *h++ / 32766.0f;
 	r.z = *h   / 32766.0f;
 	return r;
+}
+
+FINLINE uint MultiplyU32Colors(uint a, RGB8 b)
+{
+	uint result = 0u;
+	result |= ((a & 0xff) * b.r) >> 8;
+	result |= ((((a >> 8) & 0xff) * b.g) >> 8) << 8;
+	result |= ((((a >> 16) & 0xff) * b.b) >> 8) << 16;
+	return result;
 }
 
 constexpr float UcharToFloat01 = 1.0f / 255.0f;
@@ -185,66 +170,62 @@ inline int SampleSkyboxPixel(float3 rayDirection, Texture texture)
 	return (phi * texture.width) + theta + 2;
 }
 
-extern uint numMeshInstances;
-
+// todo ignore mask
 HitRecord CPU_RayCast(Ray ray)
 {
 	RayHit besthit = CreateRayHit();
 	HitRecord record = CreateHitRecord();
 	
-	if (IntersectPlane(ray, &besthit)) {
-		record.color = float3(70.0f / 255.0f, 70.0f/ 255.0f, 70.0f/ 255.0f);
-	}
-	
 	Ray meshRay;
-	const uint numInstances = numMeshInstances;
-
-	for (int i = 0; i < numInstances-1; ++i)
+	Triout hitOut;
+	int hitInstanceIndex = 0;
+	for (int i = 0; i < g_NumMeshInstances; ++i)
 	{
 		Triout triout;
 		triout.t = besthit.distance;
 		triout.triIndex = 0;
-		MeshInstance& instance = meshInstances[i];
+		MeshInstance& instance = g_MeshInstances[i];
 		// change ray position instead of mesh position for capturing in different positions
 		meshRay.origin    = Matrix4::Vector4Transform(float4(ray.origin   , 1.0f), instance.inverseTransform).xyz();
 		meshRay.direction = Matrix4::Vector4Transform(float4(ray.direction, 0.0f), instance.inverseTransform).xyz();
 		
-		Matrix3 inverseMat3 = Matrix4::ConvertToMatrix3(instance.inverseTransform);
-	
 		// instance.meshIndex = bvhIndex
-		if (IntersectBVH(meshRay, bvhNodes, bvhIndices[instance.meshIndex], triangles, &triout))
+		if (IntersectBVH(meshRay, g_BVHNodes, g_BVHIndices[instance.meshIndex], g_Triangles, &triout))
 		{
-			Tri& triangle = triangles[triout.triIndex];
-			// Material material = materials[instance.materialStart + triangle.materialIndex];
-			float3 baryCentrics = float3(1.0f - triout.u - triout.v, triout.u, triout.v);
-	        
-			float3 n0 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal0x));
-			float3 n1 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal1x));
-			float3 n2 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal2x));
-	        
-			record.normal = Vector3f::Normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
-
-			// record.uv = ConvertHalf2ToFloat2(&triangle.uv0x) * baryCentrics.x
-			// 	      + ConvertHalf2ToFloat2(&triangle.uv1x) * baryCentrics.y
-			// 	      + ConvertHalf2ToFloat2(&triangle.uv2x) * baryCentrics.z;
-			
-			// RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], record.uv)];
-			// RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], record.uv)];
-	        // 
-			// record.color = UnpackRGB8u(material.color) * UNPACK_RGB8(pixel);
+			hitOut = triout;
+			hitInstanceIndex = i;
 			besthit.distance = triout.t;
 			besthit.index = instance.meshIndex;
 		}
 	}
 	
 	if (besthit.distance == RayacastMissDistance) {
-		// RGB8 pixel = texturePixels[SampleSkyboxPixel(ray.direction, textures[2])];
-		// float3 skybox_sample = UNPACK_RGB8(pixel);			
-		// record.color = skybox_sample;
-		printf("miss\n");
+		union u { uint color; RGB8 rgb; } us;
+		us.rgb = g_TexturePixels[SampleSkyboxPixel(ray.direction, g_Textures[2])];
+		record.color = us.color; // convert skybox color to uint32
+		return record;
 	}
+	MeshInstance hitInstance = g_MeshInstances[hitInstanceIndex];
+	Tri& triangle = g_Triangles[hitOut.triIndex];
+	Material material = g_Materials[hitInstance.materialStart + triangle.materialIndex];
+	float3 baryCentrics = float3(1.0f - hitOut.u - hitOut.v, hitOut.u, hitOut.v);
+	Matrix3 inverseMat3 = Matrix4::ConvertToMatrix3(hitInstance.inverseTransform);
+			
+	float3 n0 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal0x));
+	float3 n1 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal1x));
+	float3 n2 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal2x));
+	        
+	record.normal = Vector3f::Normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
+
+	record.uv = ConvertHalf2ToFloat2(&triangle.uv0x) * baryCentrics.x
+		      + ConvertHalf2ToFloat2(&triangle.uv1x) * baryCentrics.y
+		      + ConvertHalf2ToFloat2(&triangle.uv2x) * baryCentrics.z;
+	
+	RGB8 pixel = g_TexturePixels[SampleTexture(g_Textures[material.albedoTextureIndex], record.uv)];
+	
+	record.color = MultiplyU32Colors(material.color, pixel);
+
 	record.distance = besthit.distance;
 	record.index = besthit.index;
-
 	return record;
 }

@@ -46,28 +46,36 @@ constexpr size_t MaxMeshes = 128;
 //      add save load, we can use same arena allocators for each scene
 //      add Physics namespace and ray cast on gpu, send ray array and return hit info array execute kernel
 
+// globals
+RGB8* g_TexturePixels = nullptr;
+BVHNode* g_BVHNodes = nullptr;
+Tri* g_Triangles = nullptr;    // for each scene we will use same memory
+
+Material* g_Materials = nullptr;
+Texture* g_Textures = nullptr;
+uint* g_BVHIndices = nullptr;
+
 namespace ResourceManager
 {
 	cl_int clerr;
 	cl_mem textureHandleMem, textureDataMem;
 	cl_mem meshTriangleMem, bvhMem, bvhIndicesMem, materialsMem;
 	cl_command_queue commandQueue;
+	
+	Material m_Materials[MaxMaterials];
+	Texture m_Textures[MaxTextures];
+	uint m_BVHIndices[MaxMeshes];
 
-	Texture textures[MaxTextures];
-	uint bvhIndices[MaxMeshes];
 	uint numberOfBVH = 0;
-
+	
 	// [sword materials one per each submesh], [another sword materials for same mesh], [box materials], [armor materials], [armor materials 2]
 	// we will index these material arrays for each mesh instance
-	Material materials[MaxMaterials];
 	ObjMesh* meshObjs[MaxMeshes];
-	BVHNode* bvhNodes = nullptr;
 
 	MeshInfo meshInfos[MaxMeshes];
 	TextureInfo textureInfos[MaxTextures];
 	MaterialInfo materialInfos[MaxMaterials];
-
-	Tri* triangles;    // for each scene we will use same memory
+	
 	unsigned char* iconStaging;
 
 	size_t numTriangles = 0; 
@@ -81,15 +89,11 @@ namespace ResourceManager
 	int numMaterials  = 0;
 	int lastMeshIndex = 0;
 
-	BVHNode* GetBVHNodes()   { return bvhNodes; }
-	uint* GetBVHIndices()    { return bvhIndices; }
-	Tri* GetTriangles()      { return triangles; }
-	Material* GetMaterials() { return materials; }
-	Texture* GetTextures()   { return textures; }
-
 	MeshInfo GetMeshInfo(MeshHandle handle)          { return meshInfos[handle];    }
 	TextureInfo GetTextureInfo(TextureHandle handle) { return textureInfos[handle]; }
 	MaterialInfo GetMaterialInfo(MaterialHandle handle) { return materialInfos[handle]; }
+	
+	Material& EditMaterial(MaterialHandle handle) { return g_Materials[handle]; }
 
 	void GetGPUMemories(cl_mem* _textureHandleMem, cl_mem* _textureDataMem, cl_mem* _meshTriangleMem, cl_mem* _bvhMem, cl_mem* _bvhIndicesMem, cl_mem* _materialMem)
 	{
@@ -113,7 +117,7 @@ namespace ResourceManager
 		{
 			for (int i = 0; i < numMaterials; ++i)
 			{
-				Material& material = materials[i];
+				Material& material = g_Materials[i];
 				ImVec4 vecColor = ImGui::ColorConvertU32ToFloat4(material.color);
 				ImGui::PushID(i);
 				if (materialInfos[i].name != nullptr)
@@ -139,23 +143,26 @@ namespace ResourceManager
 // Todo fix
 Material* ResourceManager::CreateMaterial(MaterialHandle* materialPtr, int count)
 {
-	Material* ptr = materials + numMaterials;
+	Material* ptr = g_Materials + numMaterials;
 	numMaterials++;
 	return ptr;
 }
 
 void ResourceManager::PushMaterialsToGPU()
 {
-	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, materials, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, g_Materials, 0, 0, 0); assert(clerr == 0);
 }
 
 void ResourceManager::Initialize(cl_context context, cl_command_queue command_queue)
 {
 	commandQueue = command_queue;
 	// allocate memorys
-	triangles   = (Tri*)_aligned_malloc(MAX_MESH_MEMORY, 16);
+	g_Triangles   = (Tri*)_aligned_malloc(MAX_MESH_MEMORY, 16);
 	iconStaging = (unsigned char*)malloc(64 * 64 * 3 + 1);
-	bvhNodes    = (BVHNode*)_aligned_malloc(MAX_BVHMEMORY, 16);
+	g_BVHNodes    = (BVHNode*)_aligned_malloc(MAX_BVHMEMORY, 16);
+	g_TexturePixels = (RGB8*)malloc(MAX_TEXTURE_MEMORY * 2);
+
+	g_Materials = m_Materials; g_Textures = m_Textures; g_BVHIndices = m_BVHIndices; // initialize global pointers
 
 	Editor::AddOnEditor(DrawMaterialsWindow);
 	// total 2mn triangle support for now we can increase it easily because we have a lot more memory in our gpu's 2m triangle has maximum 338 mb memory on gpu
@@ -169,9 +176,9 @@ void ResourceManager::Initialize(cl_context context, cl_command_queue command_qu
 	AssetManager_Initialize();
 
 	// create default textures. white, black
-	textures[0].width = 1;  textures[1].width = 1;
-	textures[0].height = 1;  textures[1].height = 1;
-	textures[0].offset = 0;  textures[1].offset = 3;
+	g_Textures[0].width = 1;  g_Textures[1].width = 1;
+	g_Textures[0].height = 1;  g_Textures[1].height = 1;
+	g_Textures[0].offset = 0;  g_Textures[1].offset = 3;
 	unsigned char defaultTextureData[6];
 	defaultTextureData[0] = 0xFF; defaultTextureData[1] = 0xFF; defaultTextureData[2] = 0xFF;
 	defaultTextureData[3] = 0;    defaultTextureData[4] = 0;    defaultTextureData[5] = 0;
@@ -183,7 +190,7 @@ void ResourceManager::Initialize(cl_context context, cl_command_queue command_qu
 
 TextureHandle ResourceManager::ImportTexture(const char* path)
 {
-	Texture& texture = textures[numTextures]; 
+	Texture& texture = g_Textures[numTextures]; 
 	TextureInfo& textureInfo = textureInfos[numTextures];
 	textureInfo.path = _strdup(path);
 	textureInfo.name = Helper::GetPathName(textureInfo.path);
@@ -203,7 +210,11 @@ TextureHandle ResourceManager::ImportTexture(const char* path)
 		AXERROR("texture importing failed! MAX_TEXTURE_MEMORY is not enough!"); exit(0);
 	}
 	
+	// copy texture to gpu
 	clerr = clEnqueueWriteBuffer(commandQueue, textureDataMem, false, lastTextureOffset, numBytes, ptr, 0, 0, 0);  assert(clerr == 0);
+	// copy texture to cpu
+	memcpy(g_TexturePixels + lastTextureOffset, ptr, numBytes);
+
 #ifndef GAME_BUILD
 	if (texture.width <= 64 || texture.height <= 64)
 		Renderer::CreateGLTexture(textureInfo.glTextureIcon, texture.width, texture.height, ptr);
@@ -222,7 +233,7 @@ TextureHandle ResourceManager::ImportTexture(const char* path)
 }
 
 void ResourceManager::PrepareMeshes() {
-	Material* firstMaterial = materials + 0;
+	Material* firstMaterial = g_Materials + 0;
 	firstMaterial->color = 0x00FF0000u | (80 << 16) | (55);
 	firstMaterial->specularColor = 250 | (228 << 8) | (210 << 16);
 	// shininess = 50.0f, roughness = 0.6f but converted to short instead of half
@@ -235,14 +246,14 @@ void ResourceManager::PushTexturesToGPU()
 	// reload all of it 
 	clerr = clEnqueueWriteBuffer(commandQueue, textureHandleMem, false, 0 // offset
 	                     , MaxTextures * sizeof(Texture) // size
-	                     , textures, 0, 0, 0); assert(clerr == 0);
+	                     , g_Textures, 0, 0, 0); assert(clerr == 0);
 }
 
 MeshHandle ResourceManager::ImportMesh(const char* path)
 {
 	MeshInfo& meshInfo = meshInfos[numMeshes];
 	ObjMesh* mesh = nullptr;
-	mesh = AssetManager_ImportMesh(path, triangles + numTriangles);
+	mesh = AssetManager_ImportMesh(path, g_Triangles + numTriangles);
 	meshInfo.materialStart = mesh->numMaterials  ? numMaterials : 0;
 	meshInfo.triangleStart = numTriangles;
 	meshInfo.numTriangles = mesh->numTris;
@@ -251,20 +262,21 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 
 	for (int i = 0; i < mesh->numMaterials; ++i)
 	{
-		ObjMaterial& material = mesh->materials[i];
+		ObjMaterial& objMaterial = mesh->materials[i];
 		MaterialInfo& materialInfo = materialInfos[numMaterials];
-		materialInfo.name = mesh->mtlText + material.name;
+		Material& material = g_Materials[numMaterials++];
+		materialInfo.name = mesh->mtlText + objMaterial.name;
 		// todo store name etc. in somewhere else for showing it on gui	
-		materials[numMaterials].color = material.diffuseColor;
-		materials[numMaterials].specularColor = material.specularColor;
-		materials[numMaterials].shininess = material.shininess;
-		materials[numMaterials].roughness = material.roughness;
+		material.color = objMaterial.diffuseColor;
+		material.specularColor = objMaterial.specularColor;
+		material.shininess = objMaterial.shininess;
+		material.roughness = objMaterial.roughness;
 		
-		char* albedoTexture = material.diffusePath ? mesh->mtlText + material.diffusePath : nullptr;
-		materials[numMaterials].albedoTextureIndex = albedoTexture ? ImportTexture(albedoTexture) : 0;
+		char* albedoTexture = objMaterial.diffusePath ? mesh->mtlText + objMaterial.diffusePath : nullptr;
+		material .albedoTextureIndex = albedoTexture ? ImportTexture(albedoTexture) : 0;
 	
-		char* specularTexture = material.specularPath ? mesh->mtlText + material.specularPath : nullptr;
-		materials[numMaterials++].specularTextureIndex = specularTexture ? ImportTexture(specularTexture) : 0;
+		char* specularTexture = objMaterial.specularPath ? mesh->mtlText + objMaterial.specularPath : nullptr;
+		material .specularTextureIndex = specularTexture ? ImportTexture(specularTexture) : 0;
 	}
 
 	numTriangles += meshInfo.numTriangles;
@@ -278,20 +290,20 @@ extern uint BuildBVH(Tri* tris, MeshInfo* meshes, int numMeshes, BVHNode* nodes,
 
 void ResourceManager::PushMeshesToGPU()
 {	
-	uint numNodesUsed = BuildBVH(triangles, meshInfos, numMeshes, bvhNodes + lastBVHIndex, bvhIndices + numberOfBVH);
+	uint numNodesUsed = BuildBVH(g_Triangles, meshInfos, numMeshes, g_BVHNodes + lastBVHIndex, g_BVHIndices + numberOfBVH);
 	size_t addedTriangleSize = size_t(numTriangles - lastTriangleCount) * sizeof(Tri);
 
 	// add new triangles to gpu buffer
-	clerr = clEnqueueWriteBuffer(commandQueue, meshTriangleMem, false, lastTriangleCount * sizeof(Tri), addedTriangleSize, triangles, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, meshTriangleMem, false, lastTriangleCount * sizeof(Tri), addedTriangleSize, g_Triangles, 0, 0, 0); assert(clerr == 0);
 		
 	size_t bvhIndexStart = numberOfBVH * sizeof(BVHNode);
 	size_t bvhIndexSize = size_t(numMeshes - numberOfBVH) * sizeof(uint);
 
-	clerr = clEnqueueWriteBuffer(commandQueue, bvhIndicesMem, false, bvhIndexStart, bvhIndexSize, bvhIndices + numberOfBVH, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, bvhIndicesMem, false, bvhIndexStart, bvhIndexSize, g_BVHIndices + numberOfBVH, 0, 0, 0); assert(clerr == 0);
 	
-	clerr = clEnqueueWriteBuffer(commandQueue, bvhMem, false, lastBVHIndex * sizeof(BVHNode), sizeof(BVHNode) * numNodesUsed, bvhNodes + lastBVHIndex, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, bvhMem, false, lastBVHIndex * sizeof(BVHNode), sizeof(BVHNode) * numNodesUsed, g_BVHNodes + lastBVHIndex, 0, 0, 0); assert(clerr == 0);
 
-	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, materials, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, g_Materials, 0, 0, 0); assert(clerr == 0);
 	
 	numberOfBVH = numMeshes;
 	lastBVHIndex += numNodesUsed;
@@ -315,7 +327,8 @@ void ResourceManager::Finalize()
 	while (numMeshes--) AssetManager_DestroyMesh(meshObjs[numMeshes]);
 	while (numTextures--) free(textureInfos[numTextures].path); // we cant delete texture icon for now, operating system will clean it anyway and it is small data either
 	free(iconStaging);
-	_aligned_free(triangles);
-	_aligned_free(bvhNodes);
+	free(g_TexturePixels);
+	_aligned_free(g_Triangles);
+	_aligned_free(g_BVHNodes);
 	AssetManager_Destroy();
 }

@@ -10,20 +10,34 @@ struct Matrix3
 		struct { Vector3f x, y, z; };
 	};
 
-	Matrix3() 
+	const Vector3f& GetForward() const { return vec[2]; }
+	const Vector3f& GetUp()      const { return vec[1]; }
+	const Vector3f& GetRight()   const { return vec[0]; }
+
+	Matrix3()
 	{
 		m[0][0] = 1.0f;
 		m[1][1] = 1.0f;
 		m[2][2] = 1.0f;
 	}
 
-	const Vector3f& GetForward() const { return vec[2]; }
-	const Vector3f& GetUp()      const { return vec[1]; }
-	const Vector3f& GetRight()   const { return vec[0]; }
+	Matrix3(float s)
+	{
+		for (int i = 0; i < 9; ++i) m[0][i] = s;
+	}
+
+	FINLINE static Matrix3 Identity()
+	{
+		Matrix3 mat;
+		mat.m[0][0] = 1.0f;
+		mat.m[1][1] = 1.0f;
+		mat.m[2][2] = 1.0f;
+		return mat;
+	}
 
 	inline static Matrix3 LookAt(Vector3f direction, Vector3f up)
 	{
-		Matrix3 result{};
+		Matrix3 result;
 		result.vec[2] = direction;
 		Vector3f const& Right = Vector3f::Cross(up, result.vec[2]);
 		result.vec[0] = Right * RSqrt(Max(0.00001f, Vector3f::Dot(Right, Right)));
@@ -130,24 +144,6 @@ AX_ALIGNED(16) struct Matrix4
 		struct { float m[4][4]; };
 	};
 
-	Matrix4()
-	{
-		r[0] = g_XMIdentityR0;
-		r[1] = g_XMIdentityR1;
-		r[2] = g_XMIdentityR2;
-		r[3] = g_XMIdentityR3;
-	}
-
-	explicit Matrix4(float s) 
-	{
-		for (int i = 0; i < 16; ++i) m[0][i] = s;
-	}
-
-	Matrix4(__m128 x, __m128 y, __m128 z, __m128 w)
-	{
-		r[0] = x; r[1] = y; r[2] = z; r[3] = w;
-	}
-
 	const __m128& operator [] (int index) const { return r[index]; }
 	__m128& operator [] (int index) { return r[index]; }
 	
@@ -200,13 +196,13 @@ AX_ALIGNED(16) struct Matrix4
 	// please assign normalized vectors, returns view matrix
 	FINLINE static Matrix4 VECTORCALL LookAtRH(Vector3f eye, Vector3f center, const Vector3f& up)
 	{
-		Vector4 NegEyePosition;
-		Vector4 D0, D1, D2;
-		Vector4 R0, R1;
+		__m128 NegEyePosition;
+		__m128 D0, D1, D2;
+		__m128 R0, R1;
 
-		Vector4 EyePosition  = _mm_loadu_ps(&eye.x);
-		Vector4 EyeDirection = _mm_sub_ps(_mm_setzero_ps(), _mm_loadu_ps(&center.x));
-		Vector4 UpDirection  = _mm_loadu_ps(&up.x);
+		__m128 EyePosition  = _mm_loadu_ps(&eye.x);
+		__m128 EyeDirection = _mm_sub_ps(_mm_setzero_ps(), _mm_loadu_ps(&center.x));
+		__m128 UpDirection  = _mm_loadu_ps(&up.x);
 
 		R0 = SSEVectorNormalize(SSEVector3Cross(UpDirection, EyeDirection));
 		R1 = SSEVectorNormalize(SSEVector3Cross(EyeDirection, R0));
@@ -229,12 +225,13 @@ AX_ALIGNED(16) struct Matrix4
 		const float rad = fov;
 		const float h = cosf(0.5f * rad) / sinf(0.5f * rad);
 		const float w = h * height / width; ///todo max(width , Height) / min(width , Height)?
-		Matrix4 M(0.0f);
+		Matrix4 M = Matrix4::Identity();
 		M.m[0][0] = w;
 		M.m[1][1] = h;
 		M.m[2][2] = -(zFar + zNear) / (zFar - zNear);
 		M.m[2][3] = -1.0f;
 		M.m[3][2] = -(2.0f * zFar * zNear) / (zFar - zNear);
+		M.m[3][3] = 0.0f;
 		return M;
 	}
 
@@ -421,7 +418,7 @@ AX_ALIGNED(16) struct Matrix4
 
 	FINLINE static Matrix4 PositionRotationScale(const Vector3f& position, const Quaternion& rotation, const Vector3f& scale)
 	{
-		Matrix4 result{};
+		Matrix4 result = Matrix4::Identity();
 		result *= FromPosition(position);
 		result *= FromQuaternion(rotation);
 		result *= CreateScale(position);
@@ -441,7 +438,7 @@ AX_ALIGNED(16) struct Matrix4
 	}
 
 	FINLINE static Matrix4 RotationX(float angleRadians) {
-		Matrix4  out_matrix{};
+		Matrix4 out_matrix = Matrix4::Identity();
 		float c = cosf(angleRadians);
 		float s = sinf(angleRadians);
 
@@ -453,7 +450,7 @@ AX_ALIGNED(16) struct Matrix4
 	}
 
 	FINLINE static Matrix4 RotationY(float angleRadians) {
-		Matrix4 out_matrix{};
+		Matrix4 out_matrix = Matrix4::Identity();
 		float c = cosf(angleRadians);
 		float s = sinf(angleRadians);
 
@@ -465,7 +462,7 @@ AX_ALIGNED(16) struct Matrix4
 	}
 	
 	FINLINE static Matrix4 RotationZ(float angleRadians) {
-		Matrix4 out_matrix{};
+		Matrix4 out_matrix = Matrix4::Identity();
 		float c = cosf(angleRadians);
 		float s = sinf(angleRadians);
 
@@ -644,3 +641,20 @@ AX_ALIGNED(16) struct Matrix4
 	}
 };
  
+FINLINE void VECTORCALL InitializeMatrix4(Matrix4& matrix)
+{
+	matrix.r[0] = g_XMIdentityR0;
+	matrix.r[1] = g_XMIdentityR1;
+	matrix.r[2] = g_XMIdentityR2;
+	matrix.r[3] = g_XMIdentityR3;
+}
+
+FINLINE void InitializeMatrix4(Matrix4& mat, float s) 
+{
+	for (int i = 0; i < 16; ++i) mat.m[0][i] = s;
+}
+
+FINLINE void VECTORCALL InitializeMatrix4(Matrix4& r, __m128 x, __m128 y, __m128 z, __m128 w)
+{
+	r[0] = x; r[1] = y; r[2] = z; r[3] = w;
+}
