@@ -118,16 +118,14 @@ FINLINE __m128 VECTORCALL SSEVectorNormalize(const __m128 V)
 	return _mm_mul_ps(_mm_rsqrt_ps(_mm_dp_ps(V, V, 0x7f)), V);
 }
 
-FINLINE __m128 VECTORCALL SSEVector3Cross(const __m128 V1, const __m128  V2)
+FINLINE __m128 VECTORCALL SSEVector3Cross(const __m128 vec0, const __m128 vec1)
 {
-	__m128 vTemp1 = _mm_permute_ps(V1, _mm_shuffle(3, 0, 2, 1));
-	__m128 vTemp2 = _mm_permute_ps(V2, _mm_shuffle(3, 1, 0, 2));
-	__m128 vResult = _mm_mul_ps(vTemp1, vTemp2);
-	vTemp1 = _mm_permute_ps(vTemp1, _mm_shuffle(3, 0, 2, 1));
-	vTemp2 = _mm_permute_ps(vTemp2, _mm_shuffle(3, 1, 0, 2));
-	vResult = _mm_fnmadd_ps(vTemp1, vTemp2, vResult);
-	// Set w to zero
-	return _mm_and_ps(vResult, g_XMMask3);
+	__m128 tmp0 = _mm_shuffle_ps(vec0, vec0, _MM_SHUFFLE(3,0,2,1));
+	__m128 tmp1 = _mm_shuffle_ps(vec1, vec1, _MM_SHUFFLE(3,1,0,2));
+	__m128 tmp2 = _mm_mul_ps(tmp0, vec1);
+	__m128 tmp3 = _mm_mul_ps(tmp0, tmp1);
+	__m128 tmp4 = _mm_shuffle_ps(tmp2, tmp2, _MM_SHUFFLE(3,0,2,1));
+	return _mm_sub_ps(tmp3, tmp4);
 }
 
 FINLINE __m128 VECTORCALL SSEVector3Dot(const __m128 V1, const __m128 V2)
@@ -210,17 +208,17 @@ FINLINE double VECTORCALL hsum_256_pd(__m256d v)
 // from: Faster Population Counts Using AVX2 Instructions resource paper
 FINLINE int VECTORCALL popcount256_epi64(__m256i v)
 {
-static const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2,
+	static const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2,
 		2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3,
 		1, 2, 2, 3, 2, 3, 3, 4);
-static const __m256i low_mask = _mm256_set1_epi8(0x0f);
-__m256i lo =  _mm256_and_si256(v, low_mask);
-__m256i hi = _mm256_and_si256(_mm256_srli_epi32(v, 4), low_mask);
-__m256i popcnt1 = _mm256_shuffle_epi8(lookup, lo);
-__m256i popcnt2 = _mm256_shuffle_epi8(lookup, hi);
-__m256i total = _mm256_add_epi8(popcnt1, popcnt2);
-v = _mm256_sad_epu8(total, _mm256_setzero_si256());
-return _mm256_cvtsi256_si32(v) + _mm256_extract_epi64(v, 1) + _mm256_extract_epi64(v, 2) + _mm256_extract_epi64(v, 3);
+	static const __m256i low_mask = _mm256_set1_epi8(0x0f);
+	__m256i lo =  _mm256_and_si256(v, low_mask);
+	__m256i hi = _mm256_and_si256(_mm256_srli_epi32(v, 4), low_mask);
+	__m256i popcnt1 = _mm256_shuffle_epi8(lookup, lo);
+	__m256i popcnt2 = _mm256_shuffle_epi8(lookup, hi);
+	__m256i total = _mm256_add_epi8(popcnt1, popcnt2);
+	v = _mm256_sad_epu8(total, _mm256_setzero_si256());
+	return _mm256_cvtsi256_si32(v) + _mm256_extract_epi64(v, 1) + _mm256_extract_epi64(v, 2) + _mm256_extract_epi64(v, 3);
 }
 
 FINLINE __m256i VECTORCALL popcnt256si(__m256i v) // returns 4 64 bit integer that contains pop counts

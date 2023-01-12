@@ -15,4 +15,4 @@ constexpr float RayacastMissDistance = 1e30f;
 
 void CPU_RayTraceInitialize();
 
-HitRecord CPU_RayCast(Ray ray);
+HitRecord CPU_RayCast(RaySSE ray);

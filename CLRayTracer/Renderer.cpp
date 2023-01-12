@@ -291,6 +291,8 @@ void Renderer::SetMeshMatrix(MeshInstanceHandle instanceHandle, const Matrix4& m
 
 void Renderer::ClearAllInstances() { g_NumMeshInstances = 0; }
 
+extern cl_mem g_TextureHandleMem, g_TextureDataMem, g_MeshTriangleMem, g_BvhMem, g_BvhIndicesMem, g_MaterialsMem;
+
 unsigned Renderer::Render(float sunAngle)
 {
 	camera.Update();
@@ -336,19 +338,16 @@ unsigned Renderer::Render(float sunAngle)
 		clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
 		// prepare Rendering
 		clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
-		
-		cl_mem textureHandleMem, textureDataMem, meshTriangleMem, bvhMem, bvhIndicesMem, materialsMem;
-		ResourceManager::GetGPUMemories(&textureHandleMem, &textureDataMem, &meshTriangleMem, &bvhMem, &bvhIndicesMem, &materialsMem);
 
 		clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen      ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), &textureHandleMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &textureDataMem  ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &bvhIndicesMem   ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &meshTriangleMem ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), &g_TextureHandleMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &g_TextureDataMem  ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &g_BvhIndicesMem   ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &g_MeshTriangleMem ); assert(clerr == 0);
 		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem          ); assert(clerr == 0);
 		clerr = clSetKernelArg(traceKernel, 6, sizeof(TraceArgs), &trace_args   );  assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &bvhMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &materialsMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &g_BvhMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &g_MaterialsMem); assert(clerr == 0);
 		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &instanceMem); assert(clerr == 0);
 
 		// execute rendering

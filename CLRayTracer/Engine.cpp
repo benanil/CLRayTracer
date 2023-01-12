@@ -114,7 +114,7 @@ float Engine_Tick()
 	{
 		const Camera& camera = Renderer::GetCamera();
 		Vector2f mousePos = Window::GetMouseWindowPos();
-		Ray ray = camera.ScreenPointToRay(mousePos);
+		RaySSE ray = camera.ScreenPointToRaySSE(mousePos);
 		
 		HitRecord record = CPU_RayCast(ray);
 		

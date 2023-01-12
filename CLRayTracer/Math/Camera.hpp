@@ -113,4 +113,20 @@ struct Camera
 		Vector3f rayDir = Vector3f::Normalize(target.xyz());
 		return Ray(position, rayDir);
 	}
+
+	RaySSE ScreenPointToRaySSE(Vector2f pos) const
+	{
+		Vector2f coord(pos.x / (float)viewportSize.x, pos.y / (float)viewportSize.y);
+		coord.y = 1.0f - coord.y;
+		coord = coord * 2.0f - 1.0f;
+		Vector4 target = Matrix4::Vector4Transform(Vector4(coord.x, coord.y, 1.0f, 1.0f), inverseProjection);
+		target /= target.w;
+		target = Matrix4::Vector4Transform(target, inverseView);
+		Vector3f rayDir = Vector3f::Normalize(target.xyz());
+		RaySSE ray;
+		ray.origin = _mm_load_ps(&position.x);
+		ray.direction = _mm_loadu_ps(&rayDir.x);
+		ray.direction.m128_f32[3] = 0;
+		return ray;
+	}
 };

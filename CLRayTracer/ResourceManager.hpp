@@ -85,15 +85,6 @@ namespace ResourceManager
 	constexpr MaterialHandle NoneMaterial = 0;
 	constexpr MaterialHandle DefaultMaterial = 0xFFFF;
 
-	void GetGPUMemories(
-		cl_mem* textureHandleMem,
-		cl_mem* textureDataMem  ,
-		cl_mem* meshTriangleMem ,
-		cl_mem* bvhMem          ,
-		cl_mem* meshesMem       ,
-		cl_mem* materialMem     
-	);
-
 	// manipulate returning material's properties and use handle for other things, REF handle
 	// for using with multiple submeshes you need to set count to number of submeshes
 	Material* CreateMaterial(MaterialHandle* handle, int count = 1);

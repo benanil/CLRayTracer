@@ -2,6 +2,7 @@
 #include "SIMDCommon.hpp"
 #include "Vector.hpp"
 
+
 AX_ALIGNED(16) struct Vector4
 {
 	union
@@ -22,7 +23,7 @@ AX_ALIGNED(16) struct Vector4
 	constexpr Vector4(__m128 _vec) : vec(_vec) {}
 	constexpr Vector4(float scale) : x(scale), y(scale), z(scale), w(scale) {}
 	constexpr Vector4(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
-	
+
 	constexpr Vector4(const Vector3f& a, float f) : x(a.x), y(a.y), z(a.z), w(f) {}
 
 	operator __m128() const { return vec; }
@@ -57,6 +58,12 @@ AX_ALIGNED(16) struct Vector4
 	Vector4 operator  /  (const float b) const { return _mm_div_ps(vec, _mm_set_ps1(b)); }
 	Vector4& operator *= (const float b) { vec = _mm_mul_ps(vec, _mm_set_ps1(b)); return *this; }
 	Vector4& operator /= (const float b) { vec = _mm_div_ps(vec, _mm_set_ps1(b)); return *this; }
+};
+
+AX_ALIGNED(16) struct RaySSE
+{
+	__m128 origin;
+	__m128 direction;
 };
 
 AX_ALIGNED(32) struct Vector4d

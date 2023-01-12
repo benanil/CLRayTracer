@@ -613,7 +613,7 @@ AX_ALIGNED(16) struct Matrix4
 		return mResult;
 	}
 
-	FINLINE static Vector4 VECTORCALL Vector3Transform(const Vector3f V, const Matrix4& M) noexcept
+	FINLINE static __m128 VECTORCALL Vector3Transform(const Vector3f V, const Matrix4& M) noexcept
 	{
 		__m128 vec = _mm_loadu_ps(&V.x);
 		__m128 vResult = _mm_shuffle_ps(vec, vec, _mm_shuffle(0, 0, 0, 0));
@@ -641,6 +641,18 @@ AX_ALIGNED(16) struct Matrix4
 	}
 };
  
+FINLINE static __m128 VECTORCALL Vector4Transform(__m128 v, const Matrix4& m)
+{
+	__m128 v0 = _mm_mul_ps(m.r[0], _mm_permute_ps(v, _mm_shuffle(0, 0, 0, 0)));
+	__m128 v1 = _mm_mul_ps(m.r[1], _mm_permute_ps(v, _mm_shuffle(1, 1, 1, 1)));
+	__m128 v2 = _mm_mul_ps(m.r[2], _mm_permute_ps(v, _mm_shuffle(2, 2, 2, 2)));
+	__m128 v3 = _mm_mul_ps(m.r[3], _mm_permute_ps(v, _mm_shuffle(3, 3, 3, 3)));
+	__m128 a0 = _mm_add_ps(v0, v1);
+	__m128 a1 = _mm_add_ps(v2, v3);
+	__m128 a2 = _mm_add_ps(a0, a1);
+	return a2;
+}
+
 FINLINE void VECTORCALL InitializeMatrix4(Matrix4& matrix)
 {
 	matrix.r[0] = g_XMIdentityR0;

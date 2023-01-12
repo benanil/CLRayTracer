@@ -55,11 +55,12 @@ Material* g_Materials = nullptr;
 Texture* g_Textures = nullptr;
 uint* g_BVHIndices = nullptr;
 
-namespace ResourceManager
+cl_mem g_MeshTriangleMem, g_BvhMem, g_BvhIndicesMem, g_MaterialsMem;
+cl_mem g_TextureHandleMem, g_TextureDataMem;
+
+namespace // private
 {
 	cl_int clerr;
-	cl_mem textureHandleMem, textureDataMem;
-	cl_mem meshTriangleMem, bvhMem, bvhIndicesMem, materialsMem;
 	cl_command_queue commandQueue;
 	
 	Material m_Materials[MaxMaterials];
@@ -71,7 +72,6 @@ namespace ResourceManager
 	// [sword materials one per each submesh], [another sword materials for same mesh], [box materials], [armor materials], [armor materials 2]
 	// we will index these material arrays for each mesh instance
 	ObjMesh* meshObjs[MaxMeshes];
-
 	MeshInfo meshInfos[MaxMeshes];
 	TextureInfo textureInfos[MaxTextures];
 	MaterialInfo materialInfos[MaxMaterials];
@@ -88,56 +88,46 @@ namespace ResourceManager
 	int numMeshes     = 0;
 	int numMaterials  = 0;
 	int lastMeshIndex = 0;
+}
 
-	MeshInfo GetMeshInfo(MeshHandle handle)          { return meshInfos[handle];    }
-	TextureInfo GetTextureInfo(TextureHandle handle) { return textureInfos[handle]; }
+namespace ResourceManager // public functions
+{
+	MeshInfo GetMeshInfo(MeshHandle handle)             { return meshInfos[handle]; }
+	TextureInfo GetTextureInfo(TextureHandle handle)    { return textureInfos[handle]; }
 	MaterialInfo GetMaterialInfo(MaterialHandle handle) { return materialInfos[handle]; }
-	
 	Material& EditMaterial(MaterialHandle handle) { return g_Materials[handle]; }
-
-	void GetGPUMemories(cl_mem* _textureHandleMem, cl_mem* _textureDataMem, cl_mem* _meshTriangleMem, cl_mem* _bvhMem, cl_mem* _bvhIndicesMem, cl_mem* _materialMem)
-	{
-		*_textureHandleMem = textureHandleMem;
-		*_textureDataMem   = textureDataMem  ;
-		*_meshTriangleMem  = meshTriangleMem ;
-		*_bvhMem           = bvhMem          ;
-		*_bvhIndicesMem    = bvhIndicesMem   ;
-		*_materialMem      = materialsMem    ;
-	}
-
-	ushort GetNumMeshes() { return numMeshes; };
+	ushort GetNumMeshes()                         { return numMeshes; };
+}
 
 #ifndef IMUI_DISABLE
-	void DrawMaterialsWindow()
-	{
-		bool edited = false;
-		ImGui::Begin("Resources");
+static void DrawMaterialsWindow()
+{
+	bool edited = false;
+	ImGui::Begin("Resources");
 
-		if (ImGui::CollapsingHeader("materials"))
-		{
-			for (int i = 0; i < numMaterials; ++i)
-			{
-				Material& material = g_Materials[i];
-				ImVec4 vecColor = ImGui::ColorConvertU32ToFloat4(material.color);
-				ImGui::PushID(i);
-				if (materialInfos[i].name != nullptr)
-					ImGui::LabelText("Name:", materialInfos[i].name);
-				edited |= ImGui::ColorEdit3("color", &vecColor.x);
-				material.color = ImGui::ColorConvertFloat4ToU32(vecColor);
-				if (material.albedoTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }), ImGui::SameLine();
-				if (material.specularTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
-				edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
-				edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
-				ImGui::PopID();
-			}
-			if (edited) PushMaterialsToGPU();
-			ImGui::Separator();
-		}
-	
-		ImGui::End();
+	if (!ImGui::CollapsingHeader("materials")) { ImGui::End(); return; }
+
+	for (int i = 0; i < numMaterials; ++i)
+	{
+		Material& material = g_Materials[i];
+		ImVec4 vecColor = ImGui::ColorConvertU32ToFloat4(material.color);
+		ImGui::PushID(i);
+		if (materialInfos[i].name != nullptr)
+			ImGui::LabelText("Name:", materialInfos[i].name);
+		edited |= ImGui::ColorEdit3("color", &vecColor.x);
+		material.color = ImGui::ColorConvertFloat4ToU32(vecColor);
+		if (material.albedoTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }), ImGui::SameLine();
+		if (material.specularTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
+		edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
+		edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
+		ImGui::PopID();
 	}
-#endif
+	
+	if (edited) ResourceManager::PushMaterialsToGPU();
+
+	ImGui::End();
 }
+#endif
 
 // manipulate returning material's properties and use handle for other things, REF handle
 // Todo fix
@@ -150,7 +140,7 @@ Material* ResourceManager::CreateMaterial(MaterialHandle* materialPtr, int count
 
 void ResourceManager::PushMaterialsToGPU()
 {
-	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, g_Materials, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_MaterialsMem, false, 0, sizeof(Material) * numMaterials, g_Materials, 0, 0, 0); assert(clerr == 0);
 }
 
 void ResourceManager::Initialize(cl_context context, cl_command_queue command_queue)
@@ -166,13 +156,13 @@ void ResourceManager::Initialize(cl_context context, cl_command_queue command_qu
 
 	Editor::AddOnEditor(DrawMaterialsWindow);
 	// total 2mn triangle support for now we can increase it easily because we have a lot more memory in our gpu's 2m triangle has maximum 338 mb memory on gpu
-	meshTriangleMem = clCreateBuffer(context, CL_MEM_READ_WRITE, MAX_TRIANGLES * 2 * sizeof(Tri), nullptr, &clerr); assert(clerr == 0);
-	bvhMem        = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MAX_BVHMEMORY * 2, nullptr, &clerr); assert(clerr == 0);
-	bvhIndicesMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MaxMeshes * sizeof(uint), nullptr, &clerr); assert(clerr == 0);
-	materialsMem  = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MaxMaterials * sizeof(Material), nullptr, &clerr); assert(clerr == 0);
+	g_MeshTriangleMem = clCreateBuffer(context, CL_MEM_READ_WRITE, MAX_TRIANGLES * 2 * sizeof(Tri), nullptr, &clerr); assert(clerr == 0);
+	g_BvhMem        = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MAX_BVHMEMORY * 2, nullptr, &clerr); assert(clerr == 0);
+	g_BvhIndicesMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MaxMeshes * sizeof(uint), nullptr, &clerr); assert(clerr == 0);
+	g_MaterialsMem  = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MaxMaterials * sizeof(Material), nullptr, &clerr); assert(clerr == 0);
 	
-	textureDataMem   = clCreateBuffer(context, CL_MEM_READ_WRITE, MAX_TEXTURE_MEMORY * 2, 0, &clerr); assert(clerr == 0);
-	textureHandleMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Texture) * MaxTextures, nullptr, &clerr); assert(clerr == 0);
+	g_TextureDataMem   = clCreateBuffer(context, CL_MEM_READ_WRITE, MAX_TEXTURE_MEMORY * 2, 0, &clerr); assert(clerr == 0);
+	g_TextureHandleMem = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(Texture) * MaxTextures, nullptr, &clerr); assert(clerr == 0);
 	AssetManager_Initialize();
 
 	// create default textures. white, black
@@ -185,7 +175,7 @@ void ResourceManager::Initialize(cl_context context, cl_command_queue command_qu
 
 	lastTextureOffset = 6; numTextures = 2;
 
-	clerr = clEnqueueWriteBuffer(commandQueue, textureDataMem, false, 0, 6, defaultTextureData, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_TextureDataMem, false, 0, 6, defaultTextureData, 0, 0, 0); assert(clerr == 0);
 }
 
 TextureHandle ResourceManager::ImportTexture(const char* path)
@@ -211,7 +201,7 @@ TextureHandle ResourceManager::ImportTexture(const char* path)
 	}
 	
 	// copy texture to gpu
-	clerr = clEnqueueWriteBuffer(commandQueue, textureDataMem, false, lastTextureOffset, numBytes, ptr, 0, 0, 0);  assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_TextureDataMem, false, lastTextureOffset, numBytes, ptr, 0, 0, 0);  assert(clerr == 0);
 	// copy texture to cpu
 	memcpy(g_TexturePixels + lastTextureOffset, ptr, numBytes);
 
@@ -244,7 +234,7 @@ void ResourceManager::PrepareMeshes() {
 void ResourceManager::PushTexturesToGPU()
 {
 	// reload all of it 
-	clerr = clEnqueueWriteBuffer(commandQueue, textureHandleMem, false, 0 // offset
+	clerr = clEnqueueWriteBuffer(commandQueue, g_TextureHandleMem, false, 0 // offset
 	                     , MaxTextures * sizeof(Texture) // size
 	                     , g_Textures, 0, 0, 0); assert(clerr == 0);
 }
@@ -294,16 +284,16 @@ void ResourceManager::PushMeshesToGPU()
 	size_t addedTriangleSize = size_t(numTriangles - lastTriangleCount) * sizeof(Tri);
 
 	// add new triangles to gpu buffer
-	clerr = clEnqueueWriteBuffer(commandQueue, meshTriangleMem, false, lastTriangleCount * sizeof(Tri), addedTriangleSize, g_Triangles, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_MeshTriangleMem, false, lastTriangleCount * sizeof(Tri), addedTriangleSize, g_Triangles, 0, 0, 0); assert(clerr == 0);
 		
 	size_t bvhIndexStart = numberOfBVH * sizeof(BVHNode);
 	size_t bvhIndexSize = size_t(numMeshes - numberOfBVH) * sizeof(uint);
 
-	clerr = clEnqueueWriteBuffer(commandQueue, bvhIndicesMem, false, bvhIndexStart, bvhIndexSize, g_BVHIndices + numberOfBVH, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_BvhIndicesMem, false, bvhIndexStart, bvhIndexSize, g_BVHIndices + numberOfBVH, 0, 0, 0); assert(clerr == 0);
 	
-	clerr = clEnqueueWriteBuffer(commandQueue, bvhMem, false, lastBVHIndex * sizeof(BVHNode), sizeof(BVHNode) * numNodesUsed, g_BVHNodes + lastBVHIndex, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_BvhMem, false, lastBVHIndex * sizeof(BVHNode), sizeof(BVHNode) * numNodesUsed, g_BVHNodes + lastBVHIndex, 0, 0, 0); assert(clerr == 0);
 
-	clerr = clEnqueueWriteBuffer(commandQueue, materialsMem, false, 0, sizeof(Material) * numMaterials, g_Materials, 0, 0, 0); assert(clerr == 0);
+	clerr = clEnqueueWriteBuffer(commandQueue, g_MaterialsMem, false, 0, sizeof(Material) * numMaterials, g_Materials, 0, 0, 0); assert(clerr == 0);
 	
 	numberOfBVH = numMeshes;
 	lastBVHIndex += numNodesUsed;
@@ -313,11 +303,11 @@ void ResourceManager::PushMeshesToGPU()
 // destroys the scene
 void ResourceManager::Destroy()
 {
-	clReleaseMemObject(textureHandleMem);
-	clReleaseMemObject(textureDataMem);
-	clReleaseMemObject(bvhMem);
-	clReleaseMemObject(meshTriangleMem);
-	clReleaseMemObject(bvhIndicesMem);
+	clReleaseMemObject(g_TextureHandleMem);
+	clReleaseMemObject(g_TextureDataMem);
+	clReleaseMemObject(g_BvhMem);
+	clReleaseMemObject(g_MeshTriangleMem);
+	clReleaseMemObject(g_BvhIndicesMem);
 }
 
 // finalizes the resources

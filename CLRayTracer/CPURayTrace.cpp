@@ -39,22 +39,21 @@ static inline HitRecord CreateHitRecord() {
 	return record;
 }
 
-// todo simd
-static bool IntersectTriangle(const Ray& ray, const Tri* tri, Triout* o, int i)
+static bool VECTORCALL IntersectTriangle(const RaySSE& ray, const Tri* tri, Triout* o, int i)
 {
-	const float3 edge1 = tri->vertex1 - tri->vertex0;
-	const float3 edge2 = tri->vertex2 - tri->vertex0;
-	const float3 h = Vector3f::Cross( ray.direction, edge2 );
-	const float a = Vector3f::Dot( edge1, h );
+	const __m128 edge1 = _mm_and_ps(_mm_sub_ps(tri->v1, tri->v0), g_XMSelect1110);
+	const __m128 edge2 = _mm_and_ps(_mm_sub_ps(tri->v2, tri->v0), g_XMSelect1110);
+	const __m128 h = SSEVector3Cross(ray.direction, edge2);
+	const __m128 a = _mm_dp_ps(edge1, h, 0xff);
 	// if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
-	const float f = 1.0f / a;
-	const float3 s = ray.origin - tri->vertex0;
-	const float u = f * Vector3f::Dot( s, h );
+	const __m128 f = _mm_rcp_ps(a);
+	const __m128 s = _mm_sub_ps(ray.origin, tri->v0);
+	const float u = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps( s, h , 0xff)));
 	if (u < 0.0f || u > 1.0f) return false;
-	const float3 q = Vector3f::Cross( s, edge1 );
-	const float v = f * Vector3f::Dot( ray.direction, q );
+	const __m128 q = SSEVector3Cross( s, edge1 );
+	const float v = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps( ray.direction, q, 0xff)));
 	if (v < 0.0f || u + v > 1.0f) return false;
-	const float t = f * Vector3f::Dot( edge2, q );
+	const float t = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps( edge2, q , 0xff)));
 	if (t > 0.0001f && t < o->t) {
 		o->u = u;  o->v = v; o->t = t;
 		o->triIndex = i;
@@ -63,13 +62,24 @@ static bool IntersectTriangle(const Ray& ray, const Tri* tri, Triout* o, int i)
 	return false;
 }
 
-static 
-float IntersectAABB(const float3& origin, const float3& invDir, const float3& aabbMin, const float3& aabbMax, float minSoFar)
+FINLINE float VECTORCALL Min3(__m128 ab)
 {
-	float3 tmin = (aabbMin - origin) * invDir;
-	float3 tmax = (aabbMax - origin) * invDir;
-	float tnear = Max3(fminf(tmin, tmax));
-	float tfar  = Min3(fmaxf(tmin, tmax));
+	__m128 xy = _mm_min_ps(SSESplatX(ab), SSESplatY(ab));
+	return _mm_cvtss_f32(_mm_min_ps(xy, SSESplatZ(ab)));
+}
+
+FINLINE float VECTORCALL Max3(__m128 ab)
+{
+	__m128 xy = _mm_max_ps(SSESplatX(ab), SSESplatY(ab));
+	return _mm_cvtss_f32(_mm_max_ps(xy, SSESplatZ(ab)));
+}
+
+static float IntersectAABB(__m128 origin, const __m128 invDir, const __m128 aabbMin, const __m128& aabbMax, float minSoFar)
+{
+	__m128 tmin = _mm_mul_ps(_mm_sub_ps(aabbMin, origin), invDir);
+	__m128 tmax = _mm_mul_ps(_mm_sub_ps(aabbMax, origin), invDir);
+	float tnear = Max3(_mm_min_ps(tmin, tmax));
+	float tfar  = Min3(_mm_max_ps(tmin, tmax));
 	// return tnear < tfar && tnear > 0.0f && tnear < minSoFar;
 	if (tnear < tfar && tnear > 0.0f && tnear < minSoFar)
 		return tnear; else return RayacastMissDistance;
@@ -78,11 +88,11 @@ float IntersectAABB(const float3& origin, const float3& invDir, const float3& aa
 #define SWAPF(x, y) float tf = x; x = y, y = tf;
 #define SWAPUINT(x, y) uint tu = x; x = y, y = tu;
 
-static int IntersectBVH(const Ray& ray, const BVHNode* nodes, uint rootNode, const Tri* tris, Triout* out)
+static int IntersectBVH(const RaySSE& ray, const BVHNode* nodes, uint rootNode, const Tri* tris, Triout* out)
 {
 	int nodesToVisit[32] = { rootNode };
 	int currentNodeIndex = 1;
-	float3 invDir = float3(1.0f) / ray.direction;
+	__m128 invDir = _mm_rcp_ps(ray.direction);
 	int intersection = 0, protection = 0;
 	
 	while (currentNodeIndex > 0 && protection++ < 250)
@@ -102,8 +112,8 @@ static int IntersectBVH(const Ray& ray, const BVHNode* nodes, uint rootNode, con
 		BVHNode leftNode  = nodes[leftIndex];
 		BVHNode rightNode = nodes[rightIndex];
 		
-		float dist1 = IntersectAABB(ray.origin, invDir, leftNode.aabbMin, leftNode.aabbMax, out->t);
-		float dist2 = IntersectAABB(ray.origin, invDir, rightNode.aabbMin, rightNode.aabbMax, out->t);
+		float dist1 = IntersectAABB(ray.origin, invDir, leftNode.minv, leftNode.maxv, out->t);
+		float dist2 = IntersectAABB(ray.origin, invDir, rightNode.minv, rightNode.maxv, out->t);
 	    
 		if (dist1 > dist2) { SWAPF(dist1, dist2); SWAPUINT(leftIndex, rightIndex); }
 		
@@ -169,26 +179,30 @@ inline int SampleSkyboxPixel(float3 rayDirection, Texture texture)
 	int phi = (int)((acosf(rayDirection.y) / PI) * (float)(texture.height));
 	return (phi * texture.width) + theta + 2;
 }
-
+#include "Timer.hpp"
 // todo ignore mask
-HitRecord CPU_RayCast(Ray ray)
+HitRecord CPU_RayCast(RaySSE ray)
 {
+	CSTIMER("ray trace speed: ");
 	RayHit besthit = CreateRayHit();
 	HitRecord record = CreateHitRecord();
 	
-	Ray meshRay;
 	Triout hitOut;
 	int hitInstanceIndex = 0;
+	ray.origin.m128_f32[3] = 1.0f;
+	ray.direction.m128_f32[3] = 0.0f;
+
 	for (int i = 0; i < g_NumMeshInstances; ++i)
 	{
 		Triout triout;
 		triout.t = besthit.distance;
 		triout.triIndex = 0;
 		MeshInstance& instance = g_MeshInstances[i];
+		RaySSE meshRay;
 		// change ray position instead of mesh position for capturing in different positions
-		meshRay.origin    = Matrix4::Vector4Transform(float4(ray.origin   , 1.0f), instance.inverseTransform).xyz();
-		meshRay.direction = Matrix4::Vector4Transform(float4(ray.direction, 0.0f), instance.inverseTransform).xyz();
 		
+		meshRay.origin    = Vector4Transform(ray.origin, instance.inverseTransform);
+		meshRay.direction = Vector4Transform(ray.direction, instance.inverseTransform);
 		// instance.meshIndex = bvhIndex
 		if (IntersectBVH(meshRay, g_BVHNodes, g_BVHIndices[instance.meshIndex], g_Triangles, &triout))
 		{
@@ -201,10 +215,13 @@ HitRecord CPU_RayCast(Ray ray)
 	
 	if (besthit.distance == RayacastMissDistance) {
 		union u { uint color; RGB8 rgb; } us;
-		us.rgb = g_TexturePixels[SampleSkyboxPixel(ray.direction, g_Textures[2])];
+		float3 v3;
+		SSEStoreVector3(&v3.x, ray.direction);
+		us.rgb = g_TexturePixels[SampleSkyboxPixel(v3, g_Textures[2])];
 		record.color = us.color; // convert skybox color to uint32
 		return record;
 	}
+
 	MeshInstance hitInstance = g_MeshInstances[hitInstanceIndex];
 	Tri& triangle = g_Triangles[hitOut.triIndex];
 	Material material = g_Materials[hitInstance.materialStart + triangle.materialIndex];
