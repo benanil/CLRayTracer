@@ -201,16 +201,13 @@ struct Ray
 	Ray(Vector3f o, Vector3f d) : origin(o), direction(d) {}
 };
 
-FINLINE float3 fminf(const float3& a, const float3& b) { return float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z)); }
-FINLINE float3 fmaxf(const float3& a, const float3& b) { return float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)); }
+template<typename T> FINLINE Vector3<T> Min(const Vector3<T>& a, const Vector3<T>& b) { return Vector3<T>(Min(a.x, b.x), Min(a.y, b.y), Min(a.z, b.z)); }
+template<typename T> FINLINE Vector3<T> Max(const Vector3<T>& a, const Vector3<T>& b) { return Vector3<T>(Max(a.x, b.x), Max(a.y, b.y), Max(a.z, b.z)); }
+template<typename T> FINLINE Vector2<T> Min(const Vector2<T>& a, const Vector2<T>& b) { return Vector2<T>(Min(a.x, b.x), Min(a.y, b.y)); }
+template<typename T> FINLINE Vector2<T> Max(const Vector2<T>& a, const Vector2<T>& b) { return Vector2<T>(Max(a.x, b.x), Max(a.y, b.y)); }
 
-template<typename T>
-FINLINE Vector2<T> MinT(const Vector2<T>& a, const Vector2<T>& b) { return Vector2<T>(Min(a.x, b.x), Min(a.y, b.y)); }
-template<typename T>
-FINLINE Vector2<T> MaxT(const Vector2<T>& a, const Vector2<T>& b) { return Vector2<T>(Max(a.x, b.x), Max(a.y, b.y)); }
-
-FINLINE float Max3(const float3& a) { return fmaxf(fmaxf(a.x, a.y), a.z); }
-FINLINE float Min3(const float3& a) { return fminf(fminf(a.x, a.y), a.z); }
+template<typename T> FINLINE T Max3(const Vector3<T>& a) { return Max(Max(a.x, a.y), a.z); }
+template<typename T> FINLINE T Min3(const Vector3<T>& a) { return Min(Min(a.x, a.y), a.z); }
 
 FINLINE Vector2f ToVector2f(const Vector2i& vec) { return Vector2f((float)vec.x, (float)vec.y); }
 FINLINE Vector2i ToVector2i(const Vector2f& vec) { return Vector2i((int)vec.x, (int)vec.y);  }

@@ -1,7 +1,6 @@
 ﻿#include "Renderer.hpp"
 #include "Engine.hpp"
 #include "Window.hpp"
-#include "Logger.hpp"
 
 int main()
 {

@@ -153,6 +153,20 @@ AX_ALIGNED(16) struct Matrix4
 	Matrix4 VECTORCALL  operator *  (const Matrix4& M)  noexcept { return Matrix4::Multiply(*this, M); };
 	Matrix4& VECTORCALL operator *= (const Matrix4& M)  noexcept { *this = Matrix4::Multiply(*this, M); return *this; };
 
+	Matrix4() {}
+	explicit Matrix4(EForceInit) 
+	{
+		r[0] = g_XMIdentityR0;
+		r[1] = g_XMIdentityR1;
+		r[2] = g_XMIdentityR2;
+		r[3] = g_XMIdentityR3;
+	}
+
+	explicit Matrix4(float s)
+	{
+		r[0] = r[1] = r[2] = r[3] = _mm_set_ps1(s);
+	}
+
 	FINLINE static Matrix4 Identity()
 	{
 		Matrix4 M;
@@ -225,7 +239,7 @@ AX_ALIGNED(16) struct Matrix4
 		const float rad = fov;
 		const float h = cosf(0.5f * rad) / sinf(0.5f * rad);
 		const float w = h * height / width; ///todo max(width , Height) / min(width , Height)?
-		Matrix4 M = Matrix4::Identity();
+		Matrix4 M(ForceInit);
 		M.m[0][0] = w;
 		M.m[1][1] = h;
 		M.m[2][2] = -(zFar + zNear) / (zFar - zNear);
@@ -418,7 +432,7 @@ AX_ALIGNED(16) struct Matrix4
 
 	FINLINE static Matrix4 PositionRotationScale(const Vector3f& position, const Quaternion& rotation, const Vector3f& scale)
 	{
-		Matrix4 result = Matrix4::Identity();
+		Matrix4 result(ForceInit);
 		result *= FromPosition(position);
 		result *= FromQuaternion(rotation);
 		result *= CreateScale(position);
@@ -438,7 +452,7 @@ AX_ALIGNED(16) struct Matrix4
 	}
 
 	FINLINE static Matrix4 RotationX(float angleRadians) {
-		Matrix4 out_matrix = Matrix4::Identity();
+		Matrix4 out_matrix(ForceInit);
 		float c = cosf(angleRadians);
 		float s = sinf(angleRadians);
 
@@ -450,7 +464,7 @@ AX_ALIGNED(16) struct Matrix4
 	}
 
 	FINLINE static Matrix4 RotationY(float angleRadians) {
-		Matrix4 out_matrix = Matrix4::Identity();
+		Matrix4 out_matrix(ForceInit);
 		float c = cosf(angleRadians);
 		float s = sinf(angleRadians);
 
@@ -462,7 +476,7 @@ AX_ALIGNED(16) struct Matrix4
 	}
 	
 	FINLINE static Matrix4 RotationZ(float angleRadians) {
-		Matrix4 out_matrix = Matrix4::Identity();
+		Matrix4 out_matrix(ForceInit);
 		float c = cosf(angleRadians);
 		float s = sinf(angleRadians);
 
@@ -653,20 +667,12 @@ FINLINE static __m128 VECTORCALL Vector4Transform(__m128 v, const Matrix4& m)
 	return a2;
 }
 
-FINLINE void VECTORCALL InitializeMatrix4(Matrix4& matrix)
-{
-	matrix.r[0] = g_XMIdentityR0;
-	matrix.r[1] = g_XMIdentityR1;
-	matrix.r[2] = g_XMIdentityR2;
-	matrix.r[3] = g_XMIdentityR3;
-}
-
 FINLINE void InitializeMatrix4(Matrix4& mat, float s) 
 {
-	for (int i = 0; i < 16; ++i) mat.m[0][i] = s;
+	mat.r[0] = mat.r[1] = mat.r[2] = mat.r[3] = _mm_set_ps1(s);
 }
 
-FINLINE void VECTORCALL InitializeMatrix4(Matrix4& r, __m128 x, __m128 y, __m128 z, __m128 w)
+FINLINE void VECTORCALL InitializeMatrix4(Matrix4& r, __m128 x, __m128 y, const __m128& z, const __m128& w)
 {
 	r[0] = x; r[1] = y; r[2] = z; r[3] = w;
 }

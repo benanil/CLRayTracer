@@ -1,4 +1,3 @@
-#define CL_TARGET_OPENCL_VERSION 300
 #define __SSE__
 #define __SSE2__
 #include <Windows.h>
@@ -25,7 +24,7 @@
 namespace 
 {
 	cl_context context;
-	cl_kernel traceKernel, rayGenKernel;
+	cl_kernel traceKernel, rayGenKernel, PostProcessKernel;
 	cl_command_queue command_queue;
 	cl_program program;
 
@@ -157,10 +156,10 @@ static void InitializeOpenCL()
 	// no need to delete this kernel code memory allocated from arena allocator
 	char* kernelCode = Helper::ReadCombineKernels();
 
-	program = clCreateProgramWithSource(context, 1, (const char**)&kernelCode, NULL, &clerr); assert(clerr == 0);
+	program = clCreateProgramWithSource(context, 1, (const char**)&kernelCode, 0, &clerr); assert(clerr == 0);
 
 	// compile the program
-	if (clBuildProgram(program, 0, NULL, "", NULL, NULL) != CL_SUCCESS) // -Werror -cl-single-precision-constant -cl-mad-enable
+	if (clBuildProgram(program, 0, NULL, "-cl-std=CL2.0 -Werror", NULL, NULL) != CL_SUCCESS) // -cl-single-precision-constant -cl-mad-enable
 	{
 		size_t param_value_size;
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &param_value_size);
@@ -171,6 +170,7 @@ static void InitializeOpenCL()
 		fprintf(stderr, "\nError building program!");
 		assert(0);
 	}
+	
 }
 
 int Renderer::Initialize()
@@ -188,6 +188,7 @@ int Renderer::Initialize()
 
 	traceKernel  = clCreateKernel(program, "Trace", &clerr); assert(clerr == 0);
 	rayGenKernel = clCreateKernel(program, "RayGen", &clerr); assert(clerr == 0);
+	PostProcessKernel   = clCreateKernel(program, "PostProcess", &clerr); assert(clerr == 0);
 
 	clglScreen = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, screenTexture, &clerr); assert(clerr == 0);
 	return 1;
@@ -326,32 +327,38 @@ unsigned Renderer::Render(float sunAngle)
 		trace_args.sunAngle = sunAngle;
 		trace_args.time = time;
 
-		cl_int clerr; cl_event event;
+		cl_int clerr; 
+		cl_event event, fxaaWait;
 
 		// prepare ray generation kernel
-		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(int), &camera.projWidth);             assert(clerr == 0);
-		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(int), &camera.projHeight);            assert(clerr == 0);
-		clerr = clSetKernelArg(rayGenKernel, 2, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
-		clerr = clSetKernelArg(rayGenKernel, 3, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
-		clerr = clSetKernelArg(rayGenKernel, 4, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 0, sizeof(cl_mem), &rayMem);                    assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 1, sizeof(Matrix4), &camera.inverseView);       assert(clerr == 0);
+		clerr = clSetKernelArg(rayGenKernel, 2, sizeof(Matrix4), &camera.inverseProjection); assert(clerr == 0);
 		// execute ray generation
 		clerr = clEnqueueNDRangeKernel(command_queue, rayGenKernel, 2, nullptr, globalWorkSize, 0, 0, 0, &event); assert(clerr == 0);
 		// prepare Rendering
 		clerr = clEnqueueAcquireGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
 
-		clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen      ); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 0, sizeof(cl_mem), &clglScreen);         assert(clerr == 0);
 		clerr = clSetKernelArg(traceKernel, 1, sizeof(cl_mem), &g_TextureHandleMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &g_TextureDataMem  ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &g_BvhIndicesMem   ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &g_MeshTriangleMem ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem          ); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 6, sizeof(TraceArgs), &trace_args   );  assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &g_BvhMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &g_MaterialsMem); assert(clerr == 0);
-		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &instanceMem); assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 2, sizeof(cl_mem), &g_TextureDataMem);   assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 3, sizeof(cl_mem), &g_BvhIndicesMem);    assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 4, sizeof(cl_mem), &g_MeshTriangleMem);  assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 5, sizeof(cl_mem), &rayMem);             assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 6, sizeof(TraceArgs), &trace_args);      assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 7, sizeof(cl_mem), &g_BvhMem);           assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 8, sizeof(cl_mem), &g_MaterialsMem);     assert(clerr == 0);
+		clerr = clSetKernelArg(traceKernel, 9, sizeof(cl_mem), &instanceMem);        assert(clerr == 0);
 
 		// execute rendering
-		clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, 0);  assert(clerr == 0);
+		clerr = clEnqueueNDRangeKernel(command_queue, traceKernel, 2, nullptr, globalWorkSize, 0, 1, &event, &fxaaWait);  assert(clerr == 0);
+		
+		//prepare post processing
+		clerr = clSetKernelArg(PostProcessKernel, 0, sizeof(cl_mem), &clglScreen); assert(clerr == 0);
+		clerr = clSetKernelArg(PostProcessKernel, 1, sizeof(float), &trace_args.time); assert(clerr == 0);
+		// execute post processing
+		clerr = clEnqueueNDRangeKernel(command_queue, PostProcessKernel, 2, nullptr, globalWorkSize, 0, 1, &fxaaWait, 0); assert(clerr == 0);
+
 		clerr = clEnqueueReleaseGLObjects(command_queue, 1, &clglScreen, 0, 0, 0); assert(clerr == 0);
 
 		clFinish(command_queue);

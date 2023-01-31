@@ -114,21 +114,30 @@ float3 reflect(float3 v, float3 n) {
 	return v - n * dot(n, v) * 2.0f;
 }
 
-float luminance(float3 v)
+// ---- CONSTANTS ----
+
+constant float Infinite = 99999.0f;
+constant float InfMinusOne = 99998.0f;
+constant float UcharToFloat01 = 1.0f / 255.0f;
+constant float oneDivGamma = 1.0f / 1.2f;
+constant float c_FMul = (1.0 / 16777216.0f);
+constant float max_white_l = 0.8f;
+
+// ---- Post Processing ----
+
+float luminanceR(float3 v)
 {
 	return dot(v, (float3)(0.2126f, 0.7152f, 0.0722f));
 }
 
 float3 change_luminance(float3 c_in, float l_out)
 {
-	float l_in = luminance(c_in);
+	float l_in = luminanceR(c_in);
 	return c_in * (l_out / l_in);
 }
 
-constant float max_white_l = 0.8f;
-
-float3 ACESFilm(float3 x) {
-	float l_old = luminance(x);
+float3 Reinhard(float3 x) {
+	float l_old = luminanceR(x);
 	float numerator = l_old * (1.0f + (l_old / (max_white_l * max_white_l)));
 	float l_new = numerator / (1.0f + l_old);
 	x = change_luminance(x, l_new);
@@ -142,6 +151,17 @@ float3 Saturation(float3 in, float change)
 {
 	float3 P = (float3)(sqrt(in.x * in.x * 0.299f + (in.y * in.y * 0.587f) + (in.z * in.z * 0.114f)));
 	return P + (in - P) * change; 
+}
+
+float3 GammaCorrect(float3 result) { return pow(result, oneDivGamma); }
+
+// https://www.shadertoy.com/view/lsKSWR
+float Vignette(float2 uv)
+{
+	uv *= (float2)(1.0f) - uv.yx;   // vec2(1.0)- uv.yx; -> 1.-u.yx; Thanks FabriceNeyret !
+	float vig = uv.x * uv.y * 15.0f; // multiply with sth for intensity
+	vig = pow(vig, 0.15f); // change pow for modifying the extend of the  vignette
+	return vig; 
 }
 
 float Max3(float3 a) { return fmax(fmax(a.x, a.y), a.z); }
@@ -159,14 +179,6 @@ Matrix3 GetTangentSpace(float3 normal)
 	mat.x = tangent; mat.y = binormal; mat.z = normal;
 	return mat;
 }
-
-// ---- CONSTANTS ----
-
-constant float Infinite = 99999.0f;
-constant float InfMinusOne = 99998.0f;
-constant float UcharToFloat01 = 1.0f / 255.0f;
-constant float oneDivGamma = 1.0f / 1.2f;
-constant float c_FMul = (1.0 / 16777216.0f);
 
 // ---- RANDOM ----
 

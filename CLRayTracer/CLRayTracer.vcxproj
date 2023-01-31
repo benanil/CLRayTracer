@@ -182,6 +182,7 @@
     <ClInclude Include="Editor\Editor.hpp" />
     <ClInclude Include="Editor\FontAwesome.hpp" />
     <ClInclude Include="Engine.hpp" />
+    <ClInclude Include="unordered_dense.h" />
     <ClInclude Include="Math\Camera.hpp" />
     <ClInclude Include="cl.hpp" />
     <ClInclude Include="CLHelper.hpp" />

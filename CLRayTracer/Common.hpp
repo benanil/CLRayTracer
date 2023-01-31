@@ -60,24 +60,24 @@
 #endif
 
 #ifdef _MSC_VER
-#	ifndef AXPopCount(x)
+#	ifndef AXPopCount
 #		define AXPopCount(x) __popcnt(x)
 #   endif
-#	ifndef AXPopCount64(x)
+#	ifndef AXPopCount64
 #		define AXPopCount64(x) __popcnt64(x)
 #   endif
 #elif defined(__GNUC__) && !defined(__MINGW32__)
-#	ifndef AXPopCount(x)
+#	ifndef AXPopCount
 #		define AXPopCount(x) __builtin_popcount(x)
 #   endif
-#	ifndef AXPopCount64(x)
+#	ifndef AXPopCount64
 #		define AXPopCount64(x) __builtin_popcountl(x)
 #   endif
 #else
-#	ifndef AXPopCount(x)
+#	ifndef AXPopCount
 #		define AXPopCount(x) PopCount(x)
 #   endif
-#	ifndef AXPopCount64(x)
+#	ifndef AXPopCount64
 #		define AXPopCount64(x) PopCount(x)
 #   endif
 #endif
@@ -125,7 +125,7 @@ inline constexpr T PopCount(T i)
 template<typename T, typename size_type = ulong>
 inline size_type Distance(const T* begin, const T* end)
 {
-	size_type result;
+	size_type result = 0ul;
 	while (begin++ < end) result++;
 	return result;
 }
@@ -146,3 +146,7 @@ namespace Compare
 	inline int QGreater(const void* a, const void* b) { return *(T*)a > *(T*)b; }
 }
 
+enum EForceInit
+{
+	ForceInit
+};

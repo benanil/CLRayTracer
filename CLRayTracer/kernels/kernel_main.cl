@@ -1,8 +1,9 @@
 // software as is bla bla license bla bla gev gev gev
 // Anilcan Gulkaya 10/03/2022
 // this commented header below automaticly included 
-// #include "MathAndSTL.cl"
-
+#ifdef AUTOMATICLY_INCLUDED
+#include "MathAndSTL.cl"
+#endif
 // ---- STRUCTURES ----
 
 typedef struct _TraceArgs{
@@ -173,8 +174,8 @@ kernel void Trace(
 ) 
 {
 	const int pixelX = get_global_id(0), pixelY = get_global_id(1);
-
-	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(mad24(pixelY, get_image_width(screen), pixelX), rays));
+	int rayIndex = pixelY * get_global_size(0) + pixelX;
+	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(rayIndex, rays));
 	
 	float3 lightDir = (float3)(0.0f, sin(trace_args.sunAngle), cos(trace_args.sunAngle)); // sun dir
 	lightDir *= max(dot(lightDir, (float3)(0.0f, -1.0f, 0.0f)), 0.2f);
@@ -244,7 +245,6 @@ kernel void Trace(
 		record.point = meshRay.origin + hitOut.t * meshRay.direction;
 		
 		specularColor = MultiplyColorU32(specularPixel, material.specularColor);
-			
 		roughness = material.roughness / 65000.0f;
 		shininess = material.shininess / 65000.0f * 100.0f;
 
@@ -269,19 +269,85 @@ kernel void Trace(
 		
 		lightDir = ray.direction;
 	}
-	result = Saturation(result, 1.2f);
-	result = ACESFilm(result);
-
-	write_imagef(screen, (int2)(pixelX, pixelY), (float4)(pow(result, oneDivGamma), 1.0f));
+	
+	write_imagef(screen, (int2)(pixelX, pixelY), (float4)(result, 1.0f));
 }
 
-kernel void RayGen(int width, int height, global float* rays, Matrix4 inverseView, Matrix4 inverseProjection)
+kernel void RayGen(global float* rays, Matrix4 inverseView, Matrix4 inverseProjection)
 {
 	const int i = get_global_id(0), j = get_global_id(1);
-	float2 coord = (float2)((float)i / (float)width, (float)j / (float)height);
+	int width = get_global_size(0);
+	float2 coord = (float2)((float)i / (float)width, (float)j / (float)get_global_size(1));
 	coord = coord * 2.0f - 1.0f;
 	float4 target = MatMul(inverseProjection, (float4)(coord, 1.0f, 1.0f));
 	target /= target.w;
 	float3 rayDir = normalize(MatMul(inverseView, target).xyz);
 	vstore3(rayDir, i + j * width, rays);
+}
+
+// https://www.shadertoy.com/view/4tf3D8
+constant float FXAA_SPAN_MAX   = 8.0f;
+constant float FXAA_REDUCE_MUL = 1.0f / 8.0f;
+constant float FXAA_REDUCE_MIN = 1.0f / 128.0f;
+
+kernel void PostProcess(__read_write image2d_t screen, float time)
+{
+	int2 p = (int2)(get_global_id(0), get_global_id(1));
+	float2 resolution = (float2)(get_global_size(0), get_global_size(1));
+	float2 fp = (float2)(p.x, p.y) / resolution;
+	float2 texelSize = (float2)(1.0f, 1.0f) / resolution;
+
+	const sampler_t sampler = 
+		CLK_NORMALIZED_COORDS_TRUE | CLK_FILTER_LINEAR | CLK_ADDRESS_CLAMP_TO_EDGE;
+	
+	float3 rgbM  = read_imagef(screen, p).xyz;
+
+	// FXAA 1st stage - Find edge
+	float3 rgbNW = read_imagef(screen, p + (int2)(-1, -1)).xyz;
+	float3 rgbNE = read_imagef(screen, p + (int2)( 1, -1)).xyz;
+	float3 rgbSW = read_imagef(screen, p + (int2)(-1,  1)).xyz;
+	float3 rgbSE = read_imagef(screen, p + (int2)( 1,  1)).xyz;
+	
+	float3 luma = (float3)(0.299f, 0.587f, 0.114f);
+	
+	float lumaNW = dot(rgbNW, luma);
+	float lumaNE = dot(rgbNE, luma);
+	float lumaSW = dot(rgbSW, luma);
+	float lumaSE = dot(rgbSE, luma);
+	float lumaM  = dot(rgbM,  luma);
+	
+	float2 dir;
+	dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+	dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+   
+	float lumaSum   = lumaNW + lumaNE + lumaSW + lumaSE;
+	float dirReduce = fmax(lumaSum * (0.25f * FXAA_REDUCE_MUL), FXAA_REDUCE_MIN);
+	float rcpDirMin = 1.0f / (fmin(fabs(dir.x), fabs(dir.y)) + dirReduce);
+	
+	dir = fmin((float2)(FXAA_SPAN_MAX), fmax((float2)(-FXAA_SPAN_MAX), dir * rcpDirMin)) / resolution;
+	
+	// FXAA 2nd stage - Blur
+	float3 rgbA = 0.5f * (read_imagef(screen, sampler, fp + dir * -0.166667f) +
+		read_imagef(screen, sampler, fp + dir * 0.166667f)).xyz;
+	
+	float3 rgbB = rgbA * 0.5f + 0.25f * (
+		read_imagef(screen, sampler, fp + dir * -0.5f) +
+		read_imagef(screen, sampler, fp + dir *  0.5f)).xyz;
+   
+	float lumaB = dot(rgbB, luma);
+   
+	float lumaMin = fmin(lumaM, fmin(fmin(lumaNW, lumaNE), fmin(lumaSW, lumaSE)));
+	float lumaMax = fmax(lumaM, fmax(fmax(lumaNW, lumaNE), fmax(lumaSW, lumaSE)));
+	
+	// FXAA end
+	rgbM.xyz = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+
+	rgbM = Saturation(rgbM, 1.2f);
+	rgbM = Reinhard(rgbM);
+	rgbM = GammaCorrect(rgbM);
+	rgbM *= Vignette(fp);
+
+	float4 result = (float4)(rgbM, 1.0f);
+
+	write_imagef(screen, p, result);
 }
