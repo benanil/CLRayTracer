@@ -5,8 +5,8 @@ Features:
 * mesh rendering, texture mapping, phong shading
 * BVH, simd optimizations, cpu ray cast
 * obj mesh importer from scratch
-* FXAA, tone-mapping, Vignette
-<br/>Still work in progress so I will add:
+* FXAA, tone-mapping, Vignette  
+<br/>  Still work in progress so I will add:
 - [ ] shadows
 - [ ] refraction
 - [ ] transculency
