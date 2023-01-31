@@ -320,12 +320,7 @@ unsigned Renderer::Render(float sunAngle)
 			float time;
 			uint numMeshes;
 			float sunAngle;
-		} trace_args;
-
-		trace_args.cameraPosition = camera.position;
-		trace_args.numMeshes = g_NumMeshInstances;
-		trace_args.sunAngle = sunAngle;
-		trace_args.time = time;
+		} trace_args = { camera.position, time, g_NumMeshInstances, sunAngle };
 
 		cl_int clerr; 
 		cl_event event, fxaaWait;
