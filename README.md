@@ -6,7 +6,7 @@ Features:
 * BVH, simd optimizations, cpu ray cast
 * obj mesh importer from scratch
 * FXAA, tone-mapping, Vignette  
-<br/>  Still work in progress so I will add:
+<br/> <b/>Still work in progress so I will add:
 - [ ] shadows
 - [ ] refraction
 - [ ] transculency
