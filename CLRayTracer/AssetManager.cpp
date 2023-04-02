@@ -369,7 +369,7 @@ ObjMesh* AssetManager_ImportMesh(const char* path, Tri* triArena)
 	ObjMesh* result = nullptr;
 
 	// load .clm mesh(our custom)
-	if (false){//(std::filesystem::exists(dupPath)) {
+	if (std::filesystem::exists(dupPath)) {
 		result = AssetManager_LoadMeshFromDisk(dupPath, triArena);
 	}
 	else {
