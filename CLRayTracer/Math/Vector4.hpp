@@ -94,11 +94,11 @@ AX_ALIGNED(32) struct Vector4d
 	FINLINE static __m256d VECTORCALL Dot(const __m256d V1, const __m256d V2)
 	{
 		__m256d vDot = _mm256_mul_pd(V1, V2);
-		__m256d vTemp = _mm256_permute_pd(vDot, _mm_shuffle(2, 1, 2, 1));
+		__m256d vTemp = _mm256_permute4x64_pd(vDot, _MM_SHUFFLE(2, 1, 2, 1));
 		vDot = _mm256_add_pd(vDot, vTemp);
-		vTemp = _mm256_permute_pd(vTemp, _mm_shuffle(1, 1, 1, 1));
+		vTemp = _mm256_permute4x64_pd(vTemp, _MM_SHUFFLE(1, 1, 1, 1));
 		vDot = _mm256_add_pd(vDot, vTemp);
-		return _mm256_permute_pd(vDot, _mm_shuffle(0, 0, 0, 0)); // Splat x
+		return _mm256_permute4x64_pd(vDot, _MM_SHUFFLE(0, 0, 0, 0));
 	}
 
 	Vector4d& Normalized() { vec = Normalize(vec); return *this; }

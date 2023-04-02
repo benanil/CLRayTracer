@@ -39,6 +39,6 @@ struct Timer
 		auto start = time_point_cast<microseconds>(start_point).time_since_epoch().count();
 		auto end = time_point_cast<microseconds>(end_point).time_since_epoch().count();
 		auto _duration = end - start;
-		printf("speed ms: %f", (_duration * 0.001));
+		printf("speed ms: %f\n", (_duration * 0.001));
 	}
 };

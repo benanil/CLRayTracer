@@ -194,7 +194,7 @@ FINLINE int VECTORCALL hsum_256_epi32(__m256i v)
 	return hsum_128_epi32avx(sum128);
 }
 
-FINLINE int VECTORCALL hsum_256_epi64(__m256i v)
+FINLINE int64 VECTORCALL hsum_256_epi64(__m256i v)
 {
 	return _mm256_cvtsi256_si32(v) + _mm256_extract_epi64(v, 1) + _mm256_extract_epi64(v, 2) + _mm256_extract_epi64(v, 3);
 }
@@ -206,7 +206,7 @@ FINLINE double VECTORCALL hsum_256_pd(__m256d v)
 }
 
 // from: Faster Population Counts Using AVX2 Instructions resource paper
-FINLINE int VECTORCALL popcount256_epi64(__m256i v)
+FINLINE int64 VECTORCALL popcount256_epi64(__m256i v)
 {
 	static const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2,
 		2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3,

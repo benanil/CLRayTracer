@@ -84,7 +84,7 @@ static float EvaluateSAH(const BVHNode* node, Tri* tris, int axis, float pos)
 {
 	aabb leftBox, rightBox;
 	int leftCount = 0, rightCount = 0;
-	for (int i = 0; i < node->triCount; ++i)
+	for (uint i = 0; i < node->triCount; ++i)
 	{
 		Tri* triangle = tris + node->leftFirst + i;
 		if (GetCenteroid(triangle, axis) < pos) {

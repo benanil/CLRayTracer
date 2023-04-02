@@ -82,7 +82,7 @@ void AssetManager_Initialize()
 
 void AssetManager_Destroy()
 {
-	free(tempAlloc0), free(tempAlloc1), free(tempAlloc2);
+	FREE_ALL(tempAlloc0, tempAlloc1, tempAlloc2);
 }
 
 void AssetManager_SaveMeshToDisk(char* path, ObjMesh* mesh, uint msz);
@@ -134,7 +134,7 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 			currMaterial = mesh->materials + mesh->numMaterials;
 			// set default properties
 			currMaterial->specularColor = ~0u, currMaterial->diffuseColor = ~0u;
-			currMaterial->shininess = 3.0f, currMaterial->roughness = 0.65f;
+			currMaterial->shininess = ConvertFloatToHalf(2.2f), currMaterial->roughness = ConvertFloatToHalf(0.6f);
 			currMaterial->diffusePath = 0, currMaterial->specularPath = 0;
 			currMaterial->name = PointerDistance(mesh->mtlText, curr);
 			unsigned hash = Random::WangHash(uint(curr[0]) | uint(curr[1] << 8) | uint(curr[2] << 16));
@@ -149,13 +149,13 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 		else if (curr[0] == 'N' && curr[1] == 's') { // shininess
 			float f;
 			curr = ParseFloat(&f, curr + 2);
-			f = Clamp(f, 0.0f, 100.0f) / 100.0f;
-			currMaterial->shininess = (ushort)(f * 65000.0f); // float range to short range
+			f = Clamp(f, 0.0f, 100.0f) / 50.0f;
+			currMaterial->shininess = ConvertFloatToHalf(f); // float range to short range
 		}
 		else if (curr[0] == 'd') { // roughness
 			float f;
 			curr = ParseFloat(&f, curr + 2);
-			currMaterial->roughness = (ushort)(Clamp(f, 0.0f, 1.0f) * 65000.0f); // float range to short range
+			currMaterial->roughness = ConvertFloatToHalf(Clamp(f, 0.0f, 1.0f)); // float range to short range
 		}
 		else if (curr[0] == 'K' && curr[1] == 'd') { // diffuse color
 			float colorf[3];
@@ -253,10 +253,10 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 				AXERROR("too many triangles for mesh!"), exit(0);
 
 			float* vertPtr = (float*)tri; 
-			short* texCoordPtr = &tri->uv0x;
-			short* normalPtr = &tri->normal0x;
+			half* texCoordPtr = &tri->uv0x;
+			half* normalPtr = &tri->normal0x;
 			float* texcoords = (float*)tempAlloc1, *normals = (float*)tempAlloc2;
-
+      
 			for(int i = 0; i < 3; ++i, texCoordPtr += 2, vertPtr += 4, normalPtr += 3) // compiler please unroll :D
 			{
 				int positionIdx = 0, textureIdx = 0, normalIdx = 0;
@@ -266,12 +266,12 @@ static ObjMesh* AssetManager_ImportObj(const char* path, Tri* triArena, char* pa
 				while (IsNumber(*curr)) normalIdx = 10 * normalIdx + (*curr++ - '0'); curr++;
 			
 				positionIdx--, textureIdx--, normalIdx--;// obj index always starts from 1
-				std::memcpy(vertPtr, tempAlloc0 + (positionIdx * 3 * 4), sizeof(float3));
-				texCoordPtr[0] = short(texcoords[textureIdx * 2 + 0] * 32766.0f);
-				texCoordPtr[1] = short((1.0f - texcoords[textureIdx * 2 + 1]) * 32766.0f);
-				normalPtr[0] = short(normals[normalIdx * 3 + 0] * 32766.0f);
-				normalPtr[1] = short(normals[normalIdx * 3 + 1] * 32766.0f);
-				normalPtr[2] = short(normals[normalIdx * 3 + 2] * 32766.0f);
+				memcpy(vertPtr, tempAlloc0 + (positionIdx * 3 * 4), sizeof(float3));
+				texCoordPtr[0] = ConvertFloatToHalf(texcoords[textureIdx * 2 + 0]);
+				texCoordPtr[1] = ConvertFloatToHalf(1.0f - texcoords[textureIdx * 2 + 1]);
+				normalPtr[0] = ConvertFloatToHalf(normals[normalIdx * 3 + 0]);
+				normalPtr[1] = ConvertFloatToHalf(normals[normalIdx * 3 + 1]);
+				normalPtr[2] = ConvertFloatToHalf(normals[normalIdx * 3 + 2]);
 			}
 
 			tri->materialIndex = currentMaterial;
@@ -336,7 +336,7 @@ static ObjMesh* AssetManager_LoadMeshFromDisk(const char* path, Tri* triArena)
 
 	uint msz;
 	triFile.read((char*)&msz, sizeof(uint));
-	result->mtlText = new char[msz];
+	result->mtlText = (char*)malloc(msz);
 	triFile.read(result->mtlText, msz);
 	
 	if (meshVersion != CMeshVersion)   AXERROR("mesh version is not same!"), exit(0);
@@ -369,7 +369,7 @@ ObjMesh* AssetManager_ImportMesh(const char* path, Tri* triArena)
 	ObjMesh* result = nullptr;
 
 	// load .clm mesh(our custom)
-	if (std::filesystem::exists(dupPath)) {
+	if (false){//(std::filesystem::exists(dupPath)) {
 		result = AssetManager_LoadMeshFromDisk(dupPath, triArena);
 	}
 	else {
@@ -381,7 +381,7 @@ ObjMesh* AssetManager_ImportMesh(const char* path, Tri* triArena)
 
 void AssetManager_DestroyMesh(ObjMesh* mesh) 
 {
-	delete[] mesh->mtlText; 
+	free(mesh->mtlText); 
 	delete mesh;
 	// _aligned_free(mesh->tris);
 }

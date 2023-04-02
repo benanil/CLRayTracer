@@ -60,11 +60,11 @@ void Engine_Start()
 	// skybox texture no need to store handle
 	ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 	
-	bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
+    bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
 	nanosuitMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");
 	boxMesh = ResourceManager::ImportMesh("Assets/sphere.obj");
 	
-	bmwTransform.SetPosition(0.0f, 1.20f, 0.0f);
+	bmwTransform.SetPosition(10.0f, 1.20f, 0.0f);
 
 	ResourceManager::PushMeshesToGPU();
 	ResourceManager::PushTexturesToGPU();
@@ -76,57 +76,53 @@ void Engine_Start()
 	Renderer::RegisterMeshInstance(boxMesh, ResourceManager::NoneMaterial, Matrix4::Identity());
 
 	Renderer::EndInstanceRegister();	
+	AssetManager_Destroy();
 }
 
 float Engine_Tick()
 {
 	float dt = (float)Window::DeltaTime();
 	static float rotation = 0.0f;
-	static bool clicked = false;
 
-	bool positionChanged = false;
-	
 	bool pressing = Window::GetMouseButton(MouseButton_Right);
 
 	float speed = (dt * 5.0f) + (Window::GetKey(KeyCode_LEFT_SHIFT) * 2.0f);
 	Vector3f dir{};
 	
-	if (!pressing && Window::GetKey(KeyCode_W)) dir -= bmwTransform.GetRight(), positionChanged |= 1;
-	if (!pressing && Window::GetKey(KeyCode_S)) dir += bmwTransform.GetRight(), positionChanged |= 1;
-	if (!pressing && Window::GetKey(KeyCode_A)) dir += bmwTransform.GetForward(), positionChanged |= 1;
-	if (!pressing && Window::GetKey(KeyCode_D)) dir -= bmwTransform.GetForward(), positionChanged |= 1;
-	if (!pressing && Window::GetKey(KeyCode_Q)) dir -= bmwTransform.GetUp(), positionChanged |= 1;
-	if (!pressing && Window::GetKey(KeyCode_E)) dir += bmwTransform.GetUp(), positionChanged |= 1;
+	if (!pressing && Window::GetKey(KeyCode_W)) dir -= bmwTransform.GetRight();
+	if (!pressing && Window::GetKey(KeyCode_S)) dir += bmwTransform.GetRight();
+	if (!pressing && Window::GetKey(KeyCode_A)) dir += bmwTransform.GetForward();
+	if (!pressing && Window::GetKey(KeyCode_D)) dir -= bmwTransform.GetForward();
+	if (!pressing && Window::GetKey(KeyCode_Q)) dir -= bmwTransform.GetUp();
+	if (!pressing && Window::GetKey(KeyCode_E)) dir += bmwTransform.GetUp();
 	
 	bmwTransform.SetRotationEuler(Vector3f(0, rotation, 0));
 	rotation += dt * 0.25f;
-	
-	if (positionChanged && dir.LengthSquared() > 0.1f)
+	float lensq = dir.LengthSquared();
+
+	if (lensq > 0.1f)
 	{
-		dir = dir.Normalized();
+		dir *= RSqrt(lensq); // normalize
 		bmwTransform.position += dir * speed;
-		// bmwTransform.UpdatePosition();
+		bmwTransform.UpdatePosition();
 	}
 	Renderer::SetMeshMatrix(bmwMesh, bmwTransform.GetMatrix());
 
-
-	if (clicked && Window::GetMouseButtonUp(MouseButton_Left))
+	if (Window::GetMouseButton(MouseButton_Left))
 	{
 		const Camera& camera = Renderer::GetCamera();
 		Vector2f mousePos = Window::GetMouseWindowPos();
 		RaySSE ray = camera.ScreenPointToRaySSE(mousePos);
-		
 		HitRecord record = CPU_RayCast(ray);
 		
 		if (record.distance != RayacastMissDistance)
 		{
-			// Renderer::SetMeshPosition(boxMesh, ray.origin + (ray.direction * record.distance));
+			// Vector3f hitPos = rayn.origin + (rayn.direction * record.distance);
 			Material& material = ResourceManager::EditMaterial(7);
 			material.color = record.color;
 			ResourceManager::PushMaterialsToGPU();
 		}
 	}
-	clicked = Window::GetMouseButton(MouseButton_Left);
 	return SunAngle;
 }
 

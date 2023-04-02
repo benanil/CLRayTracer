@@ -1,10 +1,11 @@
 #pragma once
+
 #include "ResourceManager.hpp"
 
 struct ObjMaterial {
 	int name;
 	unsigned diffuseColor, specularColor;
-	ushort shininess, roughness;
+	half shininess, roughness;
 	int diffusePath, specularPath;
 };
 

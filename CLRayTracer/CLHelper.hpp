@@ -13,7 +13,7 @@
 
 namespace Helper
 {
-	inline void ChangeExtension(char* path, const char* newExt, int len)
+	inline void ChangeExtension(char* path, const char* newExt, size_t len)
 	{
 		path[len - 1] = newExt[2]; path[len - 2] = newExt[1]; path[len - 3] = newExt[0];
 	}

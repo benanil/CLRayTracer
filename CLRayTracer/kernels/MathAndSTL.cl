@@ -1,3 +1,7 @@
+// software as is bla bla license bla bla gev gev gev
+// Anilcan Gulkaya 10/03/2022
+//if you have nvidia gpu you should have driver version 530 or above in order to use half
+#pragma OPENCL EXTENSION cl_khr_fp16 : enable 
 
 // ---- MATH ----
 
@@ -164,8 +168,8 @@ float Vignette(float2 uv)
 	return vig; 
 }
 
-float Max3(float3 a) { return fmax(fmax(a.x, a.y), a.z); }
-float Min3(float3 a) { return fmin(fmin(a.x, a.y), a.z); }
+inline float Max3(float3 a) { return fmax(fmax(a.x, a.y), a.z); }
+inline float Min3(float3 a) { return fmin(fmin(a.x, a.y), a.z); }
 
 Matrix3 GetTangentSpace(float3 normal)
 {

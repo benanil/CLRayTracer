@@ -87,7 +87,7 @@ struct Bitset128
 	
 	bool All()  const { return bits[0] == ~0ul && bits[1] == ~0ul; }
 	bool Any()  const { return bits[0] + bits[1] > 0; }
-	int Count() const { return AXPopCount64(bits[0]) + AXPopCount64(bits[1]); }
+	int Count() const { return PopCount(bits[0]) + PopCount(bits[1]); }
 };
 
 struct Bitset256
@@ -127,7 +127,7 @@ struct Bitset256
 		return _mm256_movemask_epi8(_mm256_cmpgt_epi64(sse, _mm256_setzero_si256())) > 0;
 	}
 	
-	int Count() const { return popcount256_epi64(sse); }
+	int64 Count() const { return popcount256_epi64(sse); }
 };
 
 #define _AND(a, b) _mm256_and_si256(a, b)
@@ -230,7 +230,7 @@ struct Bitset1024
 		const __m256i zero = _mm256_setzero_si256();
 		return _mm256_movemask_epi8(_mm256_cmpgt_epi64(v[0], zero)) > 0 || _mm256_movemask_epi8(_mm256_cmpgt_epi64(v[1], zero)) > 0 || _mm256_movemask_epi8(_mm256_cmpgt_epi64(v[2], zero)) > 0 || _mm256_movemask_epi8(_mm256_cmpgt_epi64(v[3], zero)) > 0;
 	}
-	int Count() const
+	int64 Count() const
 	{
 		return hsum_256_epi64( // horizontal_add(popcnt(v0,v1,v2,v3))
 			_mm256_add_epi64(_mm256_add_epi64(popcnt256si(v[0]), popcnt256si(v[1])), _mm256_add_epi64(popcnt256si(v[2]), popcnt256si(v[3])))

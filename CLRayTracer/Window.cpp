@@ -56,7 +56,7 @@ namespace Window
 	Vector2f GetMouseWindowPos() {
 		double x, y;
 		glfwGetCursorPos(window, &x, &y);
-		return Vector2f(x, y);
+		return Vector2f((float)x, (float)y);
 	}
 	
 	void SetMouseScreenPos(Vector2i pos) {

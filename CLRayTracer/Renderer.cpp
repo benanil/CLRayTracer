@@ -66,7 +66,7 @@ void Renderer::CreateGLTexture(GLuint& texture, int width, int height, void* dat
 static void InitializeOpenGL()
 {
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-		assert(0, "Failed to initialize GLAD"); 
+		assert(0 && "Failed to initialize GLAD"); 
 	}
 
 	const GLchar* vertexShaderSource = "#version 330 core\n\
@@ -159,7 +159,7 @@ static void InitializeOpenCL()
 	program = clCreateProgramWithSource(context, 1, (const char**)&kernelCode, 0, &clerr); assert(clerr == 0);
 
 	// compile the program
-	if (clBuildProgram(program, 0, NULL, "-cl-std=CL2.0 -Werror", NULL, NULL) != CL_SUCCESS) // -cl-single-precision-constant -cl-mad-enable
+	if (clBuildProgram(program, 0, NULL, "-cl-std=CL2.0 -Werror -O3", NULL, NULL) != CL_SUCCESS) // -cl-single-precision-constant -cl-mad-enable
 	{
 		size_t param_value_size;
 		clerr = clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &param_value_size);
@@ -170,7 +170,6 @@ static void InitializeOpenCL()
 		fprintf(stderr, "\nError building program!");
 		assert(0);
 	}
-	
 }
 
 int Renderer::Initialize()
@@ -221,7 +220,7 @@ MeshInstanceHandle Renderer::RegisterMeshInstance(
 	MeshHandle handle, MaterialHandle materialHandle, float3 position, const Quaternion& rotation, const float3& scale)
 {
 	Matrix4 matrix = Matrix4::PositionRotationScale(position, rotation, scale);
-	return RegisterMeshInstance(handle, materialHandle, position, rotation, scale);
+	return RegisterMeshInstance(handle, materialHandle, matrix);
 }
 
 MeshInstanceHandle Renderer::RegisterMeshInstance(
@@ -242,7 +241,14 @@ MeshInstanceHandle Renderer::RegisterMeshInstance(
 }
 
 void Renderer::EndInstanceRegister() {
-	clerr = clEnqueueWriteBuffer(command_queue, instanceMem, true, lastRegisterInstanceIndex * sizeof(MeshInstance), numRegisteredInstances * sizeof(MeshInstance), g_MeshInstances + lastRegisterInstanceIndex, 0, 0, 0);	
+
+	clerr = clEnqueueWriteBuffer(
+        command_queue, instanceMem, true, 
+		lastRegisterInstanceIndex * sizeof(MeshInstance), 
+		numRegisteredInstances * sizeof(MeshInstance), 
+		g_MeshInstances + lastRegisterInstanceIndex, 0, 0, 0
+    );	
+
 	lastRegisterInstanceIndex += numRegisteredInstances;
 	numRegisteredInstances = 0;
 }
@@ -271,7 +277,8 @@ void Renderer::SetMeshPosition(MeshInstanceHandle instanceHandle, float3 positio
 	MeshInstance& instance = g_MeshInstances[instanceHandle];
 	Matrix4& transform = g_MeshTransforms[instanceHandle];
 	transform.r[3] = SSESelect(transform.r[3], _mm_setr_ps(position.x, position.y, position.z, 0), g_XMSelect1110); 
-	instance.inverseTransform = Matrix4::InverseTransform(transform);
+	// todo maybe we can eliminate this matrix inversion, because we are just changing the position
+	instance.inverseTransform = Matrix4::InverseTransform(transform); 
 
 	shouldUpdateInstances = true;
 	MinUpdatedInstanceIndex = Min(instanceHandle, (uint)MinUpdatedInstanceIndex);
@@ -292,6 +299,7 @@ void Renderer::SetMeshMatrix(MeshInstanceHandle instanceHandle, const Matrix4& m
 
 void Renderer::ClearAllInstances() { g_NumMeshInstances = 0; }
 
+// comes from ResourceManager.cpp
 extern cl_mem g_TextureHandleMem, g_TextureDataMem, g_MeshTriangleMem, g_BvhMem, g_BvhIndicesMem, g_MaterialsMem;
 
 unsigned Renderer::Render(float sunAngle)
@@ -379,6 +387,8 @@ void Renderer::Terminate()
 	clReleaseMemObject(instanceMem);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(command_queue);
+	clReleaseKernel(rayGenKernel);
 	clReleaseKernel(traceKernel);
+	clReleaseKernel(PostProcessKernel);
 	clReleaseContext(context);
 }

@@ -1,4 +1,3 @@
-#define CL_TARGET_OPENCL_VERSION 300
 #include "Renderer.hpp"
 #include "ResourceManager.hpp"
 #include "AssetManager.hpp"
@@ -118,8 +117,8 @@ static void DrawMaterialsWindow()
 		material.color = ImGui::ColorConvertFloat4ToU32(vecColor);
 		if (material.albedoTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.albedoTextureIndex].glTextureIcon, { 64, 64 }), ImGui::SameLine();
 		if (material.specularTextureIndex > 1) edited |= ImGui::ImageButton((void*)textureInfos[material.specularTextureIndex].glTextureIcon, { 64, 64 });
-		edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
-		edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
+		// edited |= ImGui::DragScalar("roughness", ImGuiDataType_U16, &material.roughness, 100.0f);
+		// edited |= ImGui::DragScalar("shininess", ImGuiDataType_U16, &material.shininess, 100.0f);
 		ImGui::PopID();
 	}
 	
@@ -134,7 +133,7 @@ static void DrawMaterialsWindow()
 Material* ResourceManager::CreateMaterial(MaterialHandle* materialPtr, int count)
 {
 	Material* ptr = g_Materials + numMaterials;
-	numMaterials++;
+	numMaterials += count;
 	return ptr;
 }
 
@@ -227,12 +226,12 @@ void ResourceManager::PrepareMeshes() {
 	firstMaterial->color = 0x00FF0000u | (80 << 16) | (55);
 	firstMaterial->specularColor = 250 | (228 << 8) | (210 << 16);
 	// shininess = 50.0f, roughness = 0.6f but converted to short instead of half
-	firstMaterial->shininess = 30000, firstMaterial->roughness = 40000; 
+	firstMaterial->shininess = ConvertFloatToHalf(1.2f);
+	firstMaterial->roughness = ConvertFloatToHalf(0.8f);
 	firstMaterial->albedoTextureIndex = 0u; firstMaterial->specularTextureIndex = 1u; numMaterials++;
 }
 
-void ResourceManager::PushTexturesToGPU()
-{
+void ResourceManager::PushTexturesToGPU() {
 	// reload all of it 
 	clerr = clEnqueueWriteBuffer(commandQueue, g_TextureHandleMem, false, 0 // offset
 	                     , MaxTextures * sizeof(Texture) // size
@@ -245,7 +244,7 @@ MeshHandle ResourceManager::ImportMesh(const char* path)
 	ObjMesh* mesh = nullptr;
 	mesh = AssetManager_ImportMesh(path, g_Triangles + numTriangles);
 	meshInfo.materialStart = mesh->numMaterials  ? numMaterials : 0;
-	meshInfo.triangleStart = numTriangles;
+	meshInfo.triangleStart = (uint)numTriangles;
 	meshInfo.numTriangles = mesh->numTris;
 	meshInfo.numMaterials = mesh->numMaterials;
 	meshObjs[numMeshes] = mesh;
@@ -303,11 +302,7 @@ void ResourceManager::PushMeshesToGPU()
 // destroys the scene
 void ResourceManager::Destroy()
 {
-	clReleaseMemObject(g_TextureHandleMem);
-	clReleaseMemObject(g_TextureDataMem);
-	clReleaseMemObject(g_BvhMem);
-	clReleaseMemObject(g_MeshTriangleMem);
-	clReleaseMemObject(g_BvhIndicesMem);
+	FOR_EACH(clReleaseMemObject, g_TextureHandleMem, g_TextureDataMem, g_BvhMem, g_MeshTriangleMem, g_BvhIndicesMem);
 }
 
 // finalizes the resources
@@ -320,5 +315,5 @@ void ResourceManager::Finalize()
 	free(g_TexturePixels);
 	_aligned_free(g_Triangles);
 	_aligned_free(g_BVHNodes);
-	AssetManager_Destroy();
+	// AssetManager_Destroy();
 }

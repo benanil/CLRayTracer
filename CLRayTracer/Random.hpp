@@ -269,10 +269,10 @@ namespace Random
 				GenerateNumbers();
 				m_Index = 0;
 			}
-			uint64 y = m_MT[m_Index++] & (m_MT[m_Index++] << 32ul);
+			uint64 y = m_MT[m_Index++] & (uint64(m_MT[m_Index++]) << 32ul);
 			y ^= y >> 11ul;
-			y ^= y << 7ul  & (0x9d2c5680ul & (0x9d2c5680ul << 32ul)); 
-			y ^= y << 15ul & (0xefc60000ul & (0xefc60000ul << 32ul)); 
+			y ^= y << 7ul  & (0x9d2c5680ull & (0x9d2c5680ull << 32ull)); 
+			y ^= y << 15ul & (0xefc60000ull & (0xefc60000ull << 32ull)); 
 			y ^= y >> 18ul;
 			return y;
 		}

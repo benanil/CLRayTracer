@@ -17,6 +17,8 @@
 #ifndef __OPENCL_CL_H
 #define __OPENCL_CL_H
 
+#define CL_TARGET_OPENCL_VERSION 300
+
  /* Detect which version to target */
 #if !defined(CL_TARGET_OPENCL_VERSION)
 #pragma message("cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)")

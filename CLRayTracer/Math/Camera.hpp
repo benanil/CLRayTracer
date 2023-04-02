@@ -38,15 +38,19 @@ struct Camera
 		RecalculateView();
 	}
 	
+    void SetCursorPos(int x, int y) 
+	{
+		Window::SetMouseScreenPos(Vector2i(x, y)); 
+		mouseOld = Vector2f((float)x, (float)y); 
+	}
+
 	void InfiniteMouse(const Vector2f& point)
 	{
-		#define SET_CURSOR_POS(_x, _y) { Window::SetMouseScreenPos(Vector2i(_x, _y)); mouseOld.x = _x; mouseOld.y = _y; }
-		if (point.x > monitorSize.x - 2) SET_CURSOR_POS(3, point.y);
-		if (point.y > monitorSize.y - 2) SET_CURSOR_POS(point.x, 3);
+		if (point.x > monitorSize.x - 2) SetCursorPos(3, (int)point.y);
+		if (point.y > monitorSize.y - 2) SetCursorPos((int)point.x, 3);
 		
-		if (point.x < 2) SET_CURSOR_POS(monitorSize.x - 3, point.y);
-		if (point.y < 2) SET_CURSOR_POS(point.x, monitorSize.y - 3);
-        #undef SET_CURSOR_POS
+		if (point.x < 2) SetCursorPos(monitorSize.x - 3, (int)point.y);
+		if (point.y < 2) SetCursorPos((int)point.x, monitorSize.y - 3);
 	}
 
 	void Update()
@@ -92,7 +96,7 @@ struct Camera
 	void RecalculateProjection(int width, int height)
 	{
 		projWidth = width; projHeight = height;
-		projection = Matrix4::PerspectiveFovRH(verticalFOV * DegToRad, width, height, nearClip, farClip);
+		projection = Matrix4::PerspectiveFovRH(verticalFOV * DegToRad, (float)width, (float)height, nearClip, farClip);
 		inverseProjection = Matrix4::Inverse(projection);	
 	}
 

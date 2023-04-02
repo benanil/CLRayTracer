@@ -48,18 +48,18 @@ static bool VECTORCALL IntersectTriangle(const RaySSE& ray, const Tri* tri, Trio
 	// if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
 	const __m128 f = _mm_rcp_ps(a);
 	const __m128 s = _mm_sub_ps(ray.origin, tri->v0);
-	const float u = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps( s, h , 0xff)));
-	if (u < 0.0f || u > 1.0f) return false;
+	const float  u = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps(s, h, 0xff)));
 	const __m128 q = SSEVector3Cross( s, edge1 );
-	const float v = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps( ray.direction, q, 0xff)));
-	if (v < 0.0f || u + v > 1.0f) return false;
-	const float t = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps( edge2, q , 0xff)));
-	if (t > 0.0001f && t < o->t) {
-		o->u = u;  o->v = v; o->t = t;
-		o->triIndex = i;
-		return true;
-	}
-	return false;
+	const float  v = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps(ray.direction, q, 0xff)));
+	const float  t = _mm_cvtss_f32(_mm_mul_ps(f, _mm_dp_ps(edge2, q, 0xff)));
+	// if passed we are going to draw triangle
+	int passed = (((t > 0.0000f) ^ (t < o->t)) + (u < 0.0f) + (u > 1.0f) + (v < 0.0f) + (u + v > 1.0f)) == 0;
+	int notPassed = 1-passed;
+	o->u = u * passed + (notPassed * o->u);
+	o->v = v * passed + (notPassed * o->v); 
+	o->t = t * passed + (notPassed * o->t);
+	o->triIndex = i * passed + (notPassed * o->triIndex);
+	return passed;
 }
 
 FINLINE float VECTORCALL Min3(__m128 ab)
@@ -88,12 +88,12 @@ static float IntersectAABB(__m128 origin, const __m128 invDir, const __m128 aabb
 #define SWAPF(x, y) float tf = x; x = y, y = tf;
 #define SWAPUINT(x, y) uint tu = x; x = y, y = tu;
 
-static int IntersectBVH(const RaySSE& ray, const BVHNode* nodes, uint rootNode, const Tri* tris, Triout* out)
+static bool IntersectBVH(const RaySSE& ray, const BVHNode* nodes, uint rootNode, const Tri* tris, Triout* out)
 {
-	int nodesToVisit[32] = { rootNode };
+	int nodesToVisit[32] = { (int)rootNode };
 	int currentNodeIndex = 1;
 	__m128 invDir = _mm_rcp_ps(ray.direction);
-	int intersection = 0, protection = 0;
+	bool intersection = 0; int protection = 0;
 	
 	while (currentNodeIndex > 0 && protection++ < 250)
 	{	
@@ -132,42 +132,44 @@ void CPU_RayTraceInitialize()
 	// maybe fill later
 }
 
-FINLINE float2 ConvertHalf2ToFloat2(const short* h) {
-	float2 r;
-	r.x = *h++ / 32766.0f;
-	r.y = *h   / 32766.0f;
-	return r;
+_NODISCARD FINLINE float2 ConvertToFloat2(const half* h)
+{
+	return float2(ConvertHalfToFloat(h[0]), ConvertHalfToFloat(h[1]));
 }
 
-FINLINE float3 ConvertHalf3ToFloat3(const short* h) {
-	float3 r;
-	r.x = *h++ / 32766.0f;
-	r.y = *h++ / 32766.0f;
-	r.z = *h   / 32766.0f;
-	return r;
+_NODISCARD FINLINE float3 ConvertToFloat3(const half* h) {
+	return float3(
+		ConvertHalfToFloat(h[0]),
+		ConvertHalfToFloat(h[1]),
+		ConvertHalfToFloat(h[2])
+    );
 }
 
-FINLINE uint MultiplyU32Colors(uint a, RGB8 b)
+_NODISCARD FINLINE uint MultiplyU32Colors(uint a, RGB8 b)
 {
 	uint result = 0u;
-	result |= ((a & 0xff) * b.r) >> 8;
-	result |= ((((a >> 8) & 0xff) * b.g) >> 8) << 8;
-	result |= ((((a >> 16) & 0xff) * b.b) >> 8) << 16;
+	result |= ((a & 0xffu) * b.r) >> 8u;
+	result |= ((((a >> 8u) & 0xffu) * b.g) >> 8u) << 8u;
+	result |= ((((a >> 16u) & 0xffu) * b.b) >> 8u) << 16u;
 	return result;
 }
 
 constexpr float UcharToFloat01 = 1.0f / 255.0f;
 
-FINLINE float3 UnpackRGB8u(uint u)
+_NODISCARD FINLINE float3 UnpackRGB8u(uint u)
 {
-	return float3(u & 255, u >> 8 & 255, u >> 16 & 255) * UcharToFloat01;
+	return float3(
+		float(u & 255u)        * UcharToFloat01,
+		float(u >> 8u  & 255u) * UcharToFloat01,
+		float(u >> 16u & 255u) * UcharToFloat01
+	);
 }
 
 #define UNPACK_RGB8(rgb8) (float3(rgb8.r, rgb8.g, rgb8.b) * UcharToFloat01)
 
 inline int SampleTexture(Texture texture, float2 uv)
 {
-	uv -= float2(floor(uv.x), floor(uv.y));
+	uv -= float2(floorf(uv.x), floorf(uv.y));
 	int uScaled = (int)(texture.width * uv.x); // (0, 1) to (0, TextureWidth )
 	int vScaled = (int)(texture.height * uv.y); // (0, 1) to (0, TextureHeight)
 	return vScaled * texture.width + texture.offset + uScaled;
@@ -179,27 +181,26 @@ inline int SampleSkyboxPixel(float3 rayDirection, Texture texture)
 	int phi = (int)((acosf(rayDirection.y) / PI) * (float)(texture.height));
 	return (phi * texture.width) + theta + 2;
 }
-#include "Timer.hpp"
+
 // todo ignore mask
 HitRecord CPU_RayCast(RaySSE ray)
 {
-	CSTIMER("ray trace speed: ");
 	RayHit besthit = CreateRayHit();
 	HitRecord record = CreateHitRecord();
 	
 	Triout hitOut;
-	int hitInstanceIndex = 0;
+	uint hitInstanceIndex = 0u;
 	ray.origin.m128_f32[3] = 1.0f;
 	ray.direction.m128_f32[3] = 0.0f;
 
-	for (int i = 0; i < g_NumMeshInstances; ++i)
+	for (uint i = 0; i < g_NumMeshInstances; ++i)
 	{
 		Triout triout;
 		triout.t = besthit.distance;
 		triout.triIndex = 0;
 		MeshInstance& instance = g_MeshInstances[i];
 		RaySSE meshRay;
-		// change ray position instead of mesh position for capturing in different positions
+		// change ray position&oriantation instead of mesh position for capturing in different positions
 		
 		meshRay.origin    = Vector4Transform(ray.origin, instance.inverseTransform);
 		meshRay.direction = Vector4Transform(ray.direction, instance.inverseTransform);
@@ -218,7 +219,7 @@ HitRecord CPU_RayCast(RaySSE ray)
 		float3 v3;
 		SSEStoreVector3(&v3.x, ray.direction);
 		us.rgb = g_TexturePixels[SampleSkyboxPixel(v3, g_Textures[2])];
-		record.color = us.color; // convert skybox color to uint32
+		record.color = us.color; // convert skybox color to uint32sa
 		return record;
 	}
 
@@ -228,15 +229,15 @@ HitRecord CPU_RayCast(RaySSE ray)
 	float3 baryCentrics = float3(1.0f - hitOut.u - hitOut.v, hitOut.u, hitOut.v);
 	Matrix3 inverseMat3 = Matrix4::ConvertToMatrix3(hitInstance.inverseTransform);
 			
-	float3 n0 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal0x));
-	float3 n1 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal1x));
-	float3 n2 = Matrix3::Multiply(inverseMat3, ConvertHalf3ToFloat3(&triangle.normal2x));
+	float3 n0 = Matrix3::Multiply(inverseMat3, ConvertToFloat3(&triangle.normal0x));
+	float3 n1 = Matrix3::Multiply(inverseMat3, ConvertToFloat3(&triangle.normal1x));
+	float3 n2 = Matrix3::Multiply(inverseMat3, ConvertToFloat3(&triangle.normal2x));
 	        
 	record.normal = Vector3f::Normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
 
-	record.uv = ConvertHalf2ToFloat2(&triangle.uv0x) * baryCentrics.x
-		      + ConvertHalf2ToFloat2(&triangle.uv1x) * baryCentrics.y
-		      + ConvertHalf2ToFloat2(&triangle.uv2x) * baryCentrics.z;
+	record.uv = ConvertToFloat2(&triangle.uv0x) * baryCentrics.x
+		        + ConvertToFloat2(&triangle.uv1x) * baryCentrics.y
+		        + ConvertToFloat2(&triangle.uv2x) * baryCentrics.z;
 	
 	RGB8 pixel = g_TexturePixels[SampleTexture(g_Textures[material.albedoTextureIndex], record.uv)];
 	

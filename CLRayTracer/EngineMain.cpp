@@ -4,10 +4,10 @@
 
 int main()
 {
-	if (!Window::Create()) return 0;
+    if (!Window::Create()) return 0;
     if (!Renderer::Initialize()) return 0;
-	Engine_Start();
-
+    Engine_Start();
+    
     while (!Window::ShouldClose())
     {
         float sunAngle = Engine_Tick();
@@ -15,9 +15,10 @@ int main()
         Window::EndFrame(screenImagegl);
         Engine_EndFrame();
     }
-
+    
     Engine_Exit();
     Window::Destroy();
     Renderer::Terminate();
     return 1;
 }
+

@@ -3,15 +3,12 @@
 // Thanks Gabe
 
 #include "Logger.hpp"
-#include <mutex>
 #include <chrono>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cstring>
 #include <stdarg.h>
 #include <fstream>
-
-static std::mutex logMutex;
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -20,7 +17,6 @@ static std::mutex logMutex;
 namespace Logger
 {
 	static bool showFileName = true;
-	
 	void ShowFileName(bool value) { showFileName = value; }
 }
 
@@ -32,7 +28,6 @@ static constexpr const char* GetFileName(const char* str)
 	}
 	return str;
 }
-
 
 void Logger::FileLog(const char* filename, const char* outputDir, int line, const char* message, Logger::Severity severity)
 {
@@ -54,8 +49,6 @@ void Logger::FileLog(const char* filename, const char* outputDir, int line, cons
 
 void Logger::Log(const char* filename, int line, const char* format, ...)
 {
-	//	std::lock_guard<std::mutex> lock(logMutex);
-	
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 2);
@@ -77,7 +70,6 @@ void Logger::Log(const char* filename, int line, const char* format, ...)
 
 void Logger::Warning(const char* filename, int line, const char* format, ...) 
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_GREEN | FOREGROUND_RED);
@@ -100,8 +92,6 @@ void Logger::Warning(const char* filename, int line, const char* format, ...)
 
 void Logger::Error(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
-
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED);
@@ -140,7 +130,6 @@ namespace ColorCode
 
 void Log(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	printf("%s%s (line %d) Log: \n", ColorCode::KBLU, filename, line);
 
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -158,7 +147,6 @@ void Log(const char* filename, int line, const char* format, ...)
 
 void Warning(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	printf("%s%s (line %d) Warning: \n", ColorCode::KYEL, filename, line);
 
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -176,7 +164,6 @@ void Warning(const char* filename, int line, const char* format, ...)
 
 void Error(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	printf("%s%s (line %d) Error: \n", ColorCode::KRED, filename, line);
 
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -195,7 +182,6 @@ void Error(const char* filename, int line, const char* format, ...)
 
 void Logger::Log(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	printf("%s (line %d) Log: \n", filename, line);
 
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -213,7 +199,6 @@ void Logger::Log(const char* filename, int line, const char* format, ...)
 
 void Logger::Warning(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	printf("%s (line %d) Warning: \n", filename, line);
 
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -231,7 +216,6 @@ void Logger::Warning(const char* filename, int line, const char* format, ...)
 
 void Logger::Error(const char* filename, int line, const char* format, ...)
 {
-	std::lock_guard<std::mutex> lock(logMutex);
 	printf("%s (line %d) Error: \n", filename, line);
 
 	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());

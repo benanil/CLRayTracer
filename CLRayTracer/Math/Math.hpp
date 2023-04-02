@@ -1,7 +1,6 @@
 #pragma once
 #include "../Common.hpp"
 #include <math.h>
-
 // constants
 constexpr float PI = 3.14159265f;
 constexpr float RadToDeg = 180.0f / PI;
@@ -58,20 +57,77 @@ FINLINE float RSqrt(float number)
 
 typedef ushort half;
 
-// https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion/60047308#60047308
-FINLINE unsigned short ConvertFloatToHalf(float f) {
-	unsigned x = *(unsigned*)&f;
-	return ((x >> 16u) & 0x8000u) | (((x & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x >> 13u) & 0x03ffu;
+FINLINE float ConvertHalfToFloat(half x)
+{
+	const uint e = (x & 0x7C00) >> 10; // exponent
+	const uint m = (x & 0x03FF) << 13; // mantissa
+	const uint v = BitCast<uint>((float)m) >> 23; // evil log2 bit hack to count leading zeros in denormalized format
+	uint a = (x & 0x8000) << 16 | (e != 0) * ((e + 112) << 23 | m);
+	a |= ((e == 0) & (m != 0)) * ((v - 37) << 23 | ((m << (150 - v)) & 0x007FE000));
+	return BitCast<float>(a); // sign : normalized : denormalized
 }
 
-FINLINE void ConvertFloat2ToHalf2(half* h, unsigned* v) {
-	unsigned x = *v, x1 = v[1];
-	h[0] = ((x >> 16u) & 0x8000u) | (((x & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x >> 13u) & 0x03ffu;
-	h[1] = ((x1 >> 16u) & 0x8000u) | (((x1 & 0x7f800000u) - 0x38000000u) >> 13u) & 0x7c00u | (x1 >> 13u) & 0x03ffu;
+FINLINE float ConvertHalfToFloatSafe(half Value)
+{
+	uint Mantissa, Exponent, Result;
+	Mantissa = (uint)(Value & 0x03FF);
+
+	if ((Value & 0x7C00) != 0)  // The value is normalized
+	{
+		Exponent = (uint)((Value >> 10) & 0x1F);
+	}
+	else if (Mantissa != 0)     // The value is denormalized
+	{
+		// Normalize the value in the resulting float
+		Exponent = 1;
+		do {
+			Exponent--;
+			Mantissa <<= 1;
+		} while ((Mantissa & 0x0400) == 0);
+
+		Mantissa &= 0x03FF;
+	}
+	else { // The value is zero
+		Exponent = (uint)-112;
+	}
+
+	Result = ((Value & 0x8000) << 16) | ((Exponent + 112) << 23) | (Mantissa << 13);
+	return *(float*)&Result;
+}
+	
+FINLINE half ConvertFloatToHalf(float Value)
+{
+	const uint b = BitCast<uint>(Value) + 0x00001000; // round-to-nearest-even: add last bit after truncated mantissa
+	const uint e = (b & 0x7F800000) >> 23; // exponent
+	const uint m = b & 0x007FFFFF; // mantissa; in line below: 0x007FF000 = 0x00800000-0x00001000 = decimal indicator flag - initial rounding
+	uint a = (b & 0x80000000) >> 16 | (e > 112) * ((((e - 112) << 10) & 0x7C00) | m >> 13);
+	return a | ((e < 113) & (e > 101))*((((0x007FF000 + m) >> (125-e)) + 1) >> 1) | (e > 143) * 0x7FFF; // sign : normalized : denormalized : saturate
 }
 
-FINLINE float ConvertHalfToFloat(half h) {
-	return ((h & 0x8000u) << 16u) | (((h & 0x7c00u) + 0x1C000u) << 13u) | ((h & 0x03FFu) << 13u);
+FINLINE half ConvertFloatToHalfSafe(float Value)
+{
+	uint Result;
+	uint IValue = ((uint*)(&Value))[0];
+	uint Sign = (IValue & 0x80000000U) >> 16U;
+	IValue = IValue & 0x7FFFFFFFU;      // Hack off the sign
+
+	if (IValue > 0x47FFEFFFU) {
+		// The number is too large to be represented as a half.  Saturate to infinity.
+		Result = 0x7FFFU;
+	}
+	else if (IValue < 0x38800000U) {
+		// The number is too small to be represented as a normalized half.
+		// Convert it to a denormalized value.
+		uint Shift = 113U - (IValue >> 23U);
+		IValue = (0x800000U | (IValue & 0x7FFFFFU)) >> Shift;
+	}
+	else {
+		// Rebias the exponent to represent the value as a normalized half.
+		IValue += 0xC8000000U;
+	}
+
+	Result = ((IValue + 0x0FFFU + ((IValue >> 13U) & 1U)) >> 13U) & 0x7FFFU; 
+	return (half)(Result | Sign);
 }
 
 FINLINE uint PackColorRGBU32(float r, float g, float b) {
@@ -102,59 +158,3 @@ FINLINE void UnpackColorRGBAf(unsigned color, float* colorf) {
 	colorf[3] = float(color >> 24) * toFloat;
 }
 
-FINLINE unsigned short ConvertFloatToHalfSafe(float Value)
-{
-	uint Result;
-	uint IValue = ((uint*)(&Value))[0];
-	uint Sign = (IValue & 0x80000000U) >> 16U;
-	IValue = IValue & 0x7FFFFFFFU;      // Hack off the sign
-
-	if (IValue > 0x47FFEFFFU) {
-		// The number is too large to be represented as a half.  Saturate to infinity.
-		Result = 0x7FFFU;
-	}
-	else if (IValue < 0x38800000U) {
-		// The number is too small to be represented as a normalized half.
-		// Convert it to a denormalized value.
-		uint Shift = 113U - (IValue >> 23U);
-		IValue = (0x800000U | (IValue & 0x7FFFFFU)) >> Shift;
-	}
-	else {
-		// Rebias the exponent to represent the value as a normalized half.
-		IValue += 0xC8000000U;
-	}
-
-	Result = ((IValue + 0x0FFFU + ((IValue >> 13U) & 1U)) >> 13U)&0x7FFFU; 
-	return (unsigned short)(Result | Sign);
-}
-
-// Code below adapted from DirectX::Math
-inline void ScalarSinCos(float* pSin, float* pCos, float  Value) noexcept
-{
-	float quotient = (1.0f / PI) * Value;
-
-	if (Value >= 0.0f)
-		quotient = float(int(quotient + 0.5f));
-	else quotient = float(int(quotient - 0.5f));
-
-	float y = Value - TwoPI * quotient;
-	// Map y to [-pi/2,pi/2] with sin(y) = sin(Value).
-	float sign;
-	if (y > PIDiv2) {
-		y = PI - y;
-		sign = -1.0f;
-	}
-	else if (y < -PIDiv2) {
-		y = -PI - y;
-		sign = -1.0f;
-	}
-	else {
-		sign = +1.0f;
-	}
-	float y2 = y * y;
-	// 11-degree minimax approximation
-	*pSin = (((((-2.3889859e-08f * y2 + 2.7525562e-06f) * y2 - 0.00019840874f) * y2 + 0.0083333310f) * y2 - 0.16666667f) * y2 + 1.0f) * y;
-	// 10-degree minimax approximation
-	float p = ((((-2.6051615e-07f * y2 + 2.4760495e-05f) * y2 - 0.0013888378f) * y2 + 0.041666638f) * y2 - 0.5f) * y2 + 1.0f;
-	*pCos = sign * p;
-}

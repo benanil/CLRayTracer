@@ -230,7 +230,7 @@ namespace Editor::ResourcesWindow
 	}
 
 
-	void RecursiveSearch(const char* key, const int len, FolderTree* tree)
+	void RecursiveSearch(const char* key, const size_t len, FolderTree* tree)
 	{
 		for (auto& folder : tree->folders)
 		{
@@ -262,7 +262,7 @@ namespace Editor::ResourcesWindow
 
 	void SearchProcess(const char* SearchText)
 	{
-		const int len = strlen(SearchText);
+		const size_t len = strlen(SearchText);
 		searchFolders.clear();
 		searchFiles.clear();
 		RecursiveSearch(SearchText, len, rootTree);

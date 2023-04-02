@@ -13,7 +13,7 @@ typedef struct _TraceArgs{
 	float sunAngle;
 } TraceArgs;
 
-typedef struct _RayHit {
+typedef struct _RayHit {	
 	float3 position;
 	float  distance;
 	int    index;
@@ -28,18 +28,18 @@ typedef struct _Material {
 	uint specularColor;
 	ushort albedoTextureIndex;
 	ushort specularTextureIndex;  
-	ushort shininess, roughness;
+	half shininess, roughness;
 } Material;
 
 typedef struct _Triangle {
 	float3 x, y, z; // triangle positions
-	short uv0[2];
-	short uv1[2];
-	short uv2[2];
+	half uv0[2];
+	half uv1[2];
+	half uv2[2];
 	ushort materialIndex;
-	short normal0[3];
-	short normal1[3];
-	short normal2[3];
+	half normal0[3];
+	half normal1[3];
+	half normal2[3];
 } Triangle;
 
 typedef struct _Triout {
@@ -85,23 +85,24 @@ bool IntersectTriangle(Ray ray, const global Triangle* tri, Triout* o, int i)
 {
 	const float3 edge1 = tri->y - tri->x;
 	const float3 edge2 = tri->z - tri->x;
-	const float3 h = cross( ray.direction, edge2 );
-	const float a = dot( edge1, h );
+	const float3 h = cross(ray.direction, edge2);
+	const float  a = dot(edge1, h);
 	// if (fabs(a) < 0.0001f) return false; // ray parallel to triangle
-	const float f = 1.0f / a;
+	const float  f = 1.0f / a;
 	const float3 s = ray.origin - tri->x.xyz;
-	const float u = f * dot( s, h );
-	if (u < 0.0f || u > 1.0f) return false;
-	const float3 q = cross( s, edge1 );
-	const float v = f * dot( ray.direction, q );
-	if (v < 0.0f || u + v > 1.0f) return false;
-	const float t = f * dot( edge2, q );
-	if (t > 0.0001f && t < o->t) {
-		o->u = u;  o->v = v; o->t = t;
-		o->triIndex = i;
-		return true;
-	}
-	return false;
+	const float  u = f * dot(s, h);
+	
+	const float3 q = cross(s, edge1);
+	const float  v = f * dot(ray.direction, q);
+	const float  t = f * dot(edge2, q);
+	// if passed we are going to draw triangle
+	int passed = (((t > 0.0000f) ^ (t < o->t)) + (u < 0.0f) + (u > 1.0f) + (v < 0.0f) + (u + v > 1.0f)) == 0;
+	int notPassed = 1-passed;
+	o->u = u * passed + (notPassed * o->u);
+	o->v = v * passed + (notPassed * o->v); 
+	o->t = t * passed + (notPassed * o->t);
+	o->triIndex = i * passed + (notPassed * o->triIndex);
+	return passed;
 }
 
 float IntersectAABB(float3 origin, float3 invDir, float3 aabbMin, float3 aabbMax, float minSoFar)
@@ -124,7 +125,7 @@ int IntersectBVH(Ray ray, const global BVHNode* nodes, uint rootNode, const glob
 {
 	int nodesToVisit[32] = { rootNode };
 	int currentNodeIndex = 1;
-	float3 invDir = (float3)(1.0f) / ray.direction;
+	float3 invDir = native_recip(ray.direction);
 	int intersection = 0, protection = 0;
 	
 	while (currentNodeIndex > 0 && protection++ < 250)
@@ -178,7 +179,7 @@ kernel void Trace(
 	Ray ray = CreateRay(vload3(0, trace_args.cameraPos), vload3(rayIndex, rays));
 	
 	float3 lightDir = (float3)(0.0f, sin(trace_args.sunAngle), cos(trace_args.sunAngle)); // sun dir
-	lightDir *= max(dot(lightDir, (float3)(0.0f, -1.0f, 0.0f)), 0.2f);
+	// lightDir *= fmax(dot(lightDir, (float3)(0.0f, -1.0f, 0.0f)), 0.2f);
 	float3 result = (float3)(0.0f, 0.0f, 0.0f);
 	float3 energy = (float3)(1.0f, 1.0f, 1.0f);
 	float3 atmosphericLight = (float3)(0.255f, 0.25f, 0.27f) * 1.0f;
@@ -228,15 +229,15 @@ kernel void Trace(
 		Material material = materials[hitInstance.materialStart + triangle.materialIndex];
 		float3 baryCentrics = (float3)(1.0f - hitOut.u - hitOut.v, hitOut.u, hitOut.v);
 
-		float3 n0 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal0)) / 32766.0f); 
-		float3 n1 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal1)) / 32766.0f);
-		float3 n2 = Mat3Mul(inverseMat3, convert_float3(vload3(0, triangle.normal2)) / 32766.0f);
-
+		float3 n0 = Mat3Mul(inverseMat3, vload_half3(0, triangle.normal0)); 
+		float3 n1 = Mat3Mul(inverseMat3, vload_half3(0, triangle.normal1));
+		float3 n2 = Mat3Mul(inverseMat3, vload_half3(0, triangle.normal2));
+		
 		record.normal = normalize((n0 * baryCentrics.x) + (n1 * baryCentrics.y) + (n2 * baryCentrics.z));
-
-		float2 uv = ((convert_float2(vload2(0, triangle.uv0)) / 32766.0f) * baryCentrics.x) 
-			+ ((convert_float2(vload2(0, triangle.uv1)) / 32766.0f) * baryCentrics.y)
-			+ ((convert_float2(vload2(0, triangle.uv2)) / 32766.0f) * baryCentrics.z);
+		
+		float2 uv = vload_half2(0, triangle.uv0) * baryCentrics.x 
+				  + vload_half2(0, triangle.uv1) * baryCentrics.y
+				  + vload_half2(0, triangle.uv2) * baryCentrics.z;
 				
 		RGB8 pixel = texturePixels[SampleTexture(textures[material.albedoTextureIndex], uv)];
 		RGB8 specularPixel = texturePixels[SampleTexture(textures[material.specularTextureIndex], uv)];
@@ -244,9 +245,9 @@ kernel void Trace(
 		record.color = MultiplyColorU32(pixel, material.color);
 		record.point = meshRay.origin + hitOut.t * meshRay.direction;
 		
-		specularColor = MultiplyColorU32(specularPixel, material.specularColor);
-		roughness = material.roughness / 65000.0f;
-		shininess = material.shininess / 65000.0f * 100.0f;
+		specularColor = (float3)(0.2f, 0.2f, 0.2f);//MultiplyColorU32(specularPixel, material.specularColor);
+		roughness = 0.5f;//convert_float(material.roughness);
+		shininess = 1.0f;// convert_float(material.shininess);
 
 		ray.origin = record.point;
 		ray.origin += record.normal * 0.01f;
@@ -258,10 +259,10 @@ kernel void Trace(
 	
 		// Shade
 		float ndl = dot(record.normal, -lightDir);
-		float3 ambient = max(0.0f - ndl, 0.1f) * atmosphericLight * record.color;
-		ndl = max(ndl, 0.0f);
+		float3 ambient = fmax(0.0f - ndl, 0.1f) * atmosphericLight * record.color;
+		ndl = fmax(ndl, 0.0f);
 		float3 specular = (float3)((1.0f - roughness) * ndl * shadow) * specularColor * ndl; 
-		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess) * 0.5f; // meshray direction = wi
+		float3 specularLighting = ndl * pow(fmax(dot(reflect(-lightDir, record.normal), meshRay.direction), 0.0f), shininess) * 0.2f; // meshray direction = wi
 
 		result += energy * (record.color * ndl) + ambient + specularLighting;
 		energy *= specular;
@@ -290,17 +291,12 @@ constant float FXAA_SPAN_MAX   = 8.0f;
 constant float FXAA_REDUCE_MUL = 1.0f / 8.0f;
 constant float FXAA_REDUCE_MIN = 1.0f / 128.0f;
 
-kernel void PostProcess(__read_write image2d_t screen, float time)
+float3 FXAA(__read_write image2d_t screen, float3 rgb, float2 uv, int2 p, float2 resolution)
 {
-	int2 p = (int2)(get_global_id(0), get_global_id(1));
-	float2 resolution = (float2)(get_global_size(0), get_global_size(1));
-	float2 fp = (float2)(p.x, p.y) / resolution;
 	float2 texelSize = (float2)(1.0f, 1.0f) / resolution;
 
 	const sampler_t sampler = 
 		CLK_NORMALIZED_COORDS_TRUE | CLK_FILTER_LINEAR | CLK_ADDRESS_CLAMP_TO_EDGE;
-	
-	float3 rgbM  = read_imagef(screen, p).xyz;
 
 	// FXAA 1st stage - Find edge
 	float3 rgbNW = read_imagef(screen, p + (int2)(-1, -1)).xyz;
@@ -314,7 +310,7 @@ kernel void PostProcess(__read_write image2d_t screen, float time)
 	float lumaNE = dot(rgbNE, luma);
 	float lumaSW = dot(rgbSW, luma);
 	float lumaSE = dot(rgbSE, luma);
-	float lumaM  = dot(rgbM,  luma);
+	float lumaM  = dot(rgb,  luma);
 	
 	float2 dir;
 	dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
@@ -327,12 +323,12 @@ kernel void PostProcess(__read_write image2d_t screen, float time)
 	dir = fmin((float2)(FXAA_SPAN_MAX), fmax((float2)(-FXAA_SPAN_MAX), dir * rcpDirMin)) / resolution;
 	
 	// FXAA 2nd stage - Blur
-	float3 rgbA = 0.5f * (read_imagef(screen, sampler, fp + dir * -0.166667f) +
-		read_imagef(screen, sampler, fp + dir * 0.166667f)).xyz;
+	float3 rgbA = 0.5f * (read_imagef(screen, sampler, uv + dir * -0.166667f) +
+		read_imagef(screen, sampler, uv + dir * 0.166667f)).xyz;
 	
 	float3 rgbB = rgbA * 0.5f + 0.25f * (
-		read_imagef(screen, sampler, fp + dir * -0.5f) +
-		read_imagef(screen, sampler, fp + dir *  0.5f)).xyz;
+		read_imagef(screen, sampler, uv + dir * -0.5f) +
+		read_imagef(screen, sampler, uv + dir *  0.5f)).xyz;
    
 	float lumaB = dot(rgbB, luma);
    
@@ -340,14 +336,24 @@ kernel void PostProcess(__read_write image2d_t screen, float time)
 	float lumaMax = fmax(lumaM, fmax(fmax(lumaNW, lumaNE), fmax(lumaSW, lumaSE)));
 	
 	// FXAA end
-	rgbM.xyz = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+	rgb = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+}
 
-	rgbM = Saturation(rgbM, 1.2f);
-	rgbM = Reinhard(rgbM);
-	rgbM = GammaCorrect(rgbM);
-	rgbM *= Vignette(fp);
+kernel void PostProcess(__read_write image2d_t screen, float time)
+{
+	int2 p = (int2)(get_global_id(0), get_global_id(1));
+	float2 resolution = (float2)(get_global_size(0), get_global_size(1));
+	float2 uv = (float2)(p.x, p.y) / resolution;
+	float3 rgb = read_imagef(screen, p).xyz;
+	
+	// rgb = FXAA(screen, rgb, uv, p, resolution);
 
-	float4 result = (float4)(rgbM, 1.0f);
+	rgb = Saturation(rgb, 1.2f);
+	rgb = Reinhard(rgb);
+	rgb = GammaCorrect(rgb);
+	rgb *= Vignette(uv);
+
+	float4 result = (float4)(rgb, 1.0f);
 
 	write_imagef(screen, p, result);
 }
