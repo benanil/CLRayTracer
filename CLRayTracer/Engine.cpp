@@ -58,7 +58,7 @@ void Engine_Start()
 	Editor::AddOnEditor(DisplayProfilerStats);
 	ResourceManager::PrepareMeshes();
 	// we should push this first! skybox texture no need to store handle
-	ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
+	ResourceManager::ImportTexture("Assets/cape_hill_4k.jpg");
 	
     bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
 	nanosuitMesh = ResourceManager::ImportMesh("Assets/nanosuit/nanosuit.obj");

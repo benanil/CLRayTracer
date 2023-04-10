@@ -174,7 +174,6 @@
     <ClCompile Include="quicklz.c" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="ResourceManager.cpp" />
-    <ClCompile Include="UnorderedDense.cpp" />
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -205,7 +204,6 @@
     <ClInclude Include="Stack.hpp" />
     <ClInclude Include="StaticHashmap.hpp" />
     <ClInclude Include="Timer.hpp" />
-    <ClInclude Include="UnorderedDense.hpp" />
     <ClInclude Include="Window.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
