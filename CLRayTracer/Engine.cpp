@@ -57,7 +57,7 @@ void Engine_Start()
 {
 	Editor::AddOnEditor(DisplayProfilerStats);
 	ResourceManager::PrepareMeshes();
-	// skybox texture no need to store handle
+	// we should push this first! skybox texture no need to store handle
 	ResourceManager::ImportTexture("Assets/2k_jupiter.jpg");
 	
     bmwMesh = ResourceManager::ImportMesh("Assets/bmw.obj");
@@ -96,8 +96,9 @@ float Engine_Tick()
 	if (!pressing && Window::GetKey(KeyCode_Q)) dir -= bmwTransform.GetUp();
 	if (!pressing && Window::GetKey(KeyCode_E)) dir += bmwTransform.GetUp();
 	
-	bmwTransform.SetRotationEuler(Vector3f(0, rotation, 0));
-	rotation += dt * 0.25f;
+    bmwTransform.SetRotationEuler(Vector3f(0, FMod(rotation, TwoPI), 0));
+
+	rotation += dt * 0.35f;
 	float lensq = dir.LengthSquared();
 
 	if (lensq > 0.1f)
@@ -118,9 +119,9 @@ float Engine_Tick()
 		if (record.distance != RayacastMissDistance)
 		{
 			// Vector3f hitPos = rayn.origin + (rayn.direction * record.distance);
-			Material& material = ResourceManager::EditMaterial(7);
-			material.color = record.color;
-			ResourceManager::PushMaterialsToGPU();
+			// Material& material = ResourceManager::EditMaterial(7);
+			// material.color = record.color;
+			// ResourceManager::PushMaterialsToGPU();
 		}
 	}
 	return SunAngle;

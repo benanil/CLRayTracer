@@ -117,7 +117,9 @@ public:
 	using iterator = ArrayIterator<T>;
 	using const_iterator = ArrayConstIterator<T>;
 
-	explicit Array(size_type defaultSize = 12) : m_Data(static_cast<T*>(calloc(1, sizeof(T) * defaultSize))), m_Size(0), m_Capacity(defaultSize)
+	explicit Array(size_type defaultSize = 12)
+	: m_Data(static_cast<T*>(calloc(1, sizeof(T) * defaultSize))),
+	  m_Size(0), m_Capacity(defaultSize)
 	{}
 
 	~Array() { if (m_Data != nullptr) free(m_Data); }

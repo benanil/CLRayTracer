@@ -18,7 +18,7 @@ struct Vector2
 	constexpr Vector2(T s)      noexcept  : x(s), y(s) { }
 	constexpr Vector2(T a, T b) noexcept  : x(a), y(b) { }
 	
-	float Length()		  const { return sqrtf(LengthSquared()); }
+	float Length()		  const { return Sqrt(LengthSquared()); }
 	float LengthSquared() const { return x * x + y * y; }
 
 	T& operator[] (int index) { return arr[index]; }
@@ -27,7 +27,7 @@ struct Vector2
 	static float Distance(const Vector2<T> a, const Vector2<T> b) {
 		float diffx = a.x - b.x;
 		float diffy = a.y - b.y;
-		return sqrtf(diffx * diffx + diffy * diffy);
+		return Sqrt(diffx * diffx + diffy * diffy);
 	}
 
 	static float DistanceSq(const Vector2<T> a, const Vector2<T> b) {
@@ -101,7 +101,7 @@ struct Vector3
 	static float Distance(const Vector3& a, const Vector3& b)
 	{
 		Vector3 diff = a - b; diff *= diff;
-		return sqrtf(diff.x + diff.y + diff.z);
+		return Sqrt(diff.x + diff.y + diff.z);
 	}
 
 	// distance squared for comparing distances, faster than distance 
@@ -140,7 +140,7 @@ struct Vector3
 	}
 	// for more accuracy you can use sqrt instead of rsqrt: a / sqrt(dot(a,a)) 
 	static Vector3 Normalize(const Vector3& a) {
-		return a / sqrtf(Vector3::Dot(a, a));
+		return a / Sqrt(Vector3::Dot(a, a));
 	}
 
 	Vector3 operator - () { return Vector3f(-x, -y, -z); }

@@ -119,7 +119,7 @@ struct Matrix3
 			biggestIndex = 3;
 		}
 
-		float biggestVal = sqrtf(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
+		float biggestVal = Sqrt(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
 		float mult = 0.25f / biggestVal;
 		
 		switch(biggestIndex)
@@ -453,9 +453,9 @@ AX_ALIGNED(16) struct Matrix4
 
 	FINLINE static Matrix4 RotationX(float angleRadians) {
 		Matrix4 out_matrix(ForceInit);
-		float c = cosf(angleRadians);
-		float s = sinf(angleRadians);
-
+		float s, c;
+		SinCos(angleRadians, &s, &c);
+		
 		out_matrix.m[1][1] = c;
 		out_matrix.m[1][2] = s;
 		out_matrix.m[2][1] = -s;
@@ -465,9 +465,9 @@ AX_ALIGNED(16) struct Matrix4
 
 	FINLINE static Matrix4 RotationY(float angleRadians) {
 		Matrix4 out_matrix(ForceInit);
-		float c = cosf(angleRadians);
-		float s = sinf(angleRadians);
-
+		float s, c;
+		SinCos(angleRadians, &s, &c);
+		
 		out_matrix.m[0][0] = c;
 		out_matrix.m[0][2] = -s;
 		out_matrix.m[2][0] = s;
@@ -477,9 +477,9 @@ AX_ALIGNED(16) struct Matrix4
 	
 	FINLINE static Matrix4 RotationZ(float angleRadians) {
 		Matrix4 out_matrix(ForceInit);
-		float c = cosf(angleRadians);
-		float s = sinf(angleRadians);
-
+		float s, c;
+		SinCos(angleRadians, &s, &c);
+		
 		out_matrix.m[0][0] = c;
 		out_matrix.m[0][1] = s;
 		out_matrix.m[1][0] = -s;
@@ -543,7 +543,7 @@ AX_ALIGNED(16) struct Matrix4
 
 		if (trace > 0.0f)
 		{
-			root = sqrtf(trace + 1.0f);
+			root = Sqrt(trace + 1.0f);
 			Orientation.w = 0.5f * root;
 			root = 0.5f / root;
 			Orientation.x = root * (M.m[1][2] - M.m[2][1]);
@@ -559,7 +559,7 @@ AX_ALIGNED(16) struct Matrix4
 			j = Next[i];
 			k = Next[j];
 
-			root = sqrtf(M.m[i][i] - M.m[j][j] - M.m[k][k] + 1.0f);
+			root = Sqrt(M.m[i][i] - M.m[j][j] - M.m[k][k] + 1.0f);
 
 			Orientation[i] = 0.5f * root;
 			root = 0.5f / root;

@@ -81,6 +81,9 @@
     <ClCompile Include="CPURayTrace.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="UnorderedDense.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cl.hpp">
@@ -167,7 +170,7 @@
     <ClInclude Include="CPURayTrace.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="miniaudio.h">
+    <ClInclude Include="UnorderedDense.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

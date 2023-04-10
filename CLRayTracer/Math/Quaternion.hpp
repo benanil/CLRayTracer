@@ -117,13 +117,17 @@ AX_ALIGNED(16) struct Quaternion
 	FINLINE Quaternion static FromEuler(float x, float y, float z) noexcept
 	{
 		x *= 0.5f; y *= 0.5f; z *= 0.5f;
-		float cx = cosf(x), cy = cosf(y), cz = cosf(z);
-		float sx = sinf(x), sy = sinf(y), sz = sinf(z);
+		float c[4], s[4];
+		__m128 cv;
+		__m128 sv = _mm_sincos_ps(&cv, _mm_setr_ps(x, y, z, 1.0f));
+		_mm_store_ps(c, cv);
+		_mm_store_ps(s, sv);
+
 		Quaternion q;
-		q.w = cx * cy * cz + sx * sy * sz;
-		q.x = sx * cy * cz - cx * sy * sz;
-		q.y = cx * sy * cz + sx * cy * sz;
-		q.z = cx * cy * sz - sx * sy * cz;
+		q.w = c[0] * c[1] * c[2] + s[0] * s[1] * s[2];
+		q.x = s[0] * c[1] * c[2] - c[0] * s[1] * s[2];
+		q.y = c[0] * s[1] * c[2] + s[0] * c[1] * s[2];
+		q.z = c[0] * c[1] * s[2] - s[0] * s[1] * c[2];
 		return q;
 	}
 
@@ -133,10 +137,10 @@ AX_ALIGNED(16) struct Quaternion
 	}
 
 	inline Vector3f static ToEulerAngles(const Quaternion& q) noexcept {
-		Vector3f eulerAngles;
-		eulerAngles.x = atan2f(2.0f * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
-		eulerAngles.y = asinf(Clamp(-2.0f * (q.x * q.z - q.w * q.y), -1.0f, 1.0f));
-		eulerAngles.z = atan2f(2.0f * (q.x * q.y + q.w * q.z), q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z);
+		Vector3f eulerAngles; // using std is recommended
+		eulerAngles.x = ATan2(2.0f * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
+		eulerAngles.y = ASin(Clamp(-2.0f * (q.x * q.z - q.w * q.y), -1.0f, 1.0f));
+		eulerAngles.z = ATan2(2.0f * (q.x * q.y + q.w * q.z), q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z);
 		return eulerAngles;
 	}
 

@@ -177,8 +177,8 @@ inline int SampleTexture(Texture texture, float2 uv)
 
 inline int SampleSkyboxPixel(float3 rayDirection, Texture texture)
 {
-	int theta = (int)((atan2f(rayDirection.x, -rayDirection.z) / PI) * 0.5f * (float)(texture.width));
-	int phi = (int)((acosf(rayDirection.y) / PI) * (float)(texture.height));
+	int theta = (int)((ATan2(rayDirection.x, -rayDirection.z) / PI) * 0.5f * (float)(texture.width));
+	int phi = (int)((ACos(rayDirection.y) / PI) * (float)(texture.height));
 	return (phi * texture.width) + theta + 2;
 }
 
