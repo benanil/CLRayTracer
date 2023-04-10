@@ -169,7 +169,7 @@ _NODISCARD FINLINE float3 UnpackRGB8u(uint u)
 
 inline int SampleTexture(Texture texture, float2 uv)
 {
-	uv -= float2(floorf(uv.x), floorf(uv.y));
+	uv -= float2(Floor(uv.x), Floor(uv.y));
 	int uScaled = (int)(texture.width * uv.x); // (0, 1) to (0, TextureWidth )
 	int vScaled = (int)(texture.height * uv.y); // (0, 1) to (0, TextureHeight)
 	return vScaled * texture.width + texture.offset + uScaled;

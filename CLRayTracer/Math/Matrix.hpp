@@ -237,7 +237,7 @@ AX_ALIGNED(16) struct Matrix4
 	FINLINE static Matrix4 PerspectiveFovRH(float fov, float width, float height, float zNear, float zFar)
 	{
 		const float rad = fov;
-		const float h = cosf(0.5f * rad) / sinf(0.5f * rad);
+		const float h = Cos(0.5f * rad) / Sin(0.5f * rad);
 		const float w = h * height / width; ///todo max(width , Height) / min(width , Height)?
 		Matrix4 M(ForceInit);
 		M.m[0][0] = w;

@@ -75,7 +75,7 @@ namespace Random
 		virtual uint64 Next64() = 0;
 
 		float NextFloat(float min, float max) {
-			return min + (NextFloat01() * fabsf(min - max));
+			return min + (NextFloat01() * FAbs(min - max));
 		}
 
 		float NextFloat01() {
@@ -87,7 +87,7 @@ namespace Random
 		}
 		
 		double NextDouble(double min, double max) {
-			return min + (NextDouble01() * fabs(min - max));
+			return min + (NextDouble01() * FAbs(min - max));
 		}
 
 		int NextInt(const int _min, const int _max) { return _min + NextBound(_max - _min); }

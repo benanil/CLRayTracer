@@ -19,10 +19,15 @@ template<typename T> FINLINE constexpr T Min(const T a, const T b) { return a < 
 template<typename T> FINLINE constexpr T Clamp(const T x, const T a, const T b) { return Max(a, Min(b, x)); }
 
 FINLINE _NODISCARD float Pow(float x, float y) { return powf(x, y);   }
-FINLINE _NODISCARD float Sqrt(float x)  { return sqrtf(x);  }
-FINLINE _NODISCARD float Log(float x)   { return logf(x);   }
-FINLINE _NODISCARD float Log10(float x) { return log10f(x); }
-FINLINE _NODISCARD float Log2(float x)  { return log2f(x);  }
+FINLINE _NODISCARD float Sqrt(float x)         { return sqrtf(x);  }
+FINLINE _NODISCARD float Log(float x)          { return logf(x);   }
+FINLINE _NODISCARD float Log10(float x)        { return log10f(x); }
+FINLINE _NODISCARD float Log2(float x)         { return log2f(x);  }
+
+FINLINE constexpr _NODISCARD float FAbs(float x) { return x < 0.0f ? -x : x; }
+FINLINE constexpr _NODISCARD double FAbs(double x) { return x < 0.0 ? -x : x; }
+FINLINE constexpr _NODISCARD bool IsZero(float x) noexcept { return FAbs(x) <= 0.0001f; }
+FINLINE constexpr _NODISCARD bool AlmostEqual(float x, float  y) noexcept { return FAbs(x-y) <= 0.001f; }
 
 FINLINE constexpr _NODISCARD float FMod(float x, float y) {
 	float quotient = x / y;
@@ -32,9 +37,10 @@ FINLINE constexpr _NODISCARD float FMod(float x, float y) {
 	return remainder;
 }
 
-FINLINE constexpr _NODISCARD float FAbs(float x) { return x < 0.0f ? -x : x; }
-FINLINE constexpr _NODISCARD bool IsZero(float x) noexcept { return FAbs(x) <= 0.0001f; }
-FINLINE constexpr _NODISCARD bool AlmostEqual(float x, float  y) noexcept { return FAbs(x-y) <= 0.001f; }
+FINLINE constexpr _NODISCARD float Floor(float x) {
+	float whole = (float)(int)x;  // truncate quotient to integer
+	return x - (x-whole);
+}
 
 template<typename T> FINLINE constexpr 
 bool IsPowerOfTwo(T x) noexcept { return !(x&1) & (x != 0); }
@@ -59,7 +65,9 @@ FINLINE _NODISCARD float ATan2(float y, float x) {
 	float th = ATan(z);              // [0,π/4]
 	if(invert) th = PI_2 - th;       // [0,π/2]
 	if(x < 0)  th = PI - th;         // [0,π]
-	return __copysignf(th, y);       // [-π,π] // with removing this function we can make this function constexpr
+	// with removing this function we can make this function constexpr
+	// and not compatible with other than MSVC
+	return __copysignf(th, y);       // [-π,π] 
 }
 
 FINLINE _NODISCARD float ASin(float z) 
