@@ -32,14 +32,14 @@ inline void Swap(T& a, T& b)
 template<typename T>
 inline void BubbleSort(T* arr, int len)
 {
-	for (int i = 0; i < len; ++i)
-	{
-		for (int j = 0; j < len - i - 1; ++j)
-		{
-			if (arr[i + 1] < arr[i])
-				Swap(arr[i], arr[i + 1]);
-		}
-	}
+    for (int i = 0; i < len-1; ++i)
+    {
+        for (int j = 0; j < len-i-1; ++j)
+        {
+            if (arr[j] > arr[j + 1])
+                Swap(arr[j], arr[j + 1]);
+        }
+    }
 }
 
 // smaller stack size compared to quicksort
