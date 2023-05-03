@@ -171,3 +171,28 @@ inline void FillN(T* arr, T val, int n)
 {
 	for (int i = 0; i < n; ++i) arr[i] = val;
 }
+
+template<typename T> 
+inline bool Contains(const T* arr, const T& val, int n)
+{
+    for (int i = 0; i < n; ++i) 
+        if (arr[i] == val) return true;
+    return false;
+}
+
+template<typename T> 
+inline int IndexOf(const T* arr, const T& val, int n)
+{
+    for (int i = 0; i < n; ++i) 
+        if (arr[i] == val) return i;
+    return -1;
+}
+
+template<typename T> 
+inline int CountIf(const T* arr, const T& val, int n)
+{
+    int count = 0;
+    for (int i = 0; i < n; ++i) 
+        count += arr[i] == val)
+    return count;
+}
