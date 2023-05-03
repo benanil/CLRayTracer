@@ -193,6 +193,6 @@ inline int CountIf(const T* arr, const T& val, int n)
 {
     int count = 0;
     for (int i = 0; i < n; ++i) 
-        count += arr[i] == val)
+        count += arr[i] == val;
     return count;
 }
